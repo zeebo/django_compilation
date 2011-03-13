@@ -48,7 +48,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_script_files()
-            self.assertEqual(scripts, [src for _, src in combination])
+            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
             
     def test_parse_script_inline_html(self):
         srcs = [
@@ -60,7 +60,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_script_inlines()
-            self.assertEqual(scripts, [src for _, src in combination])
+            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
 
     def test_parse_style_html(self):
         links = [
@@ -73,7 +73,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_style_files()
-            self.assertEqual(scripts, [src for _, src in combination])
+            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
             
     def test_parse_style_inline_html(self):
         srcs = [
@@ -85,7 +85,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_style_inlines()
-            self.assertEqual(scripts, [src for _, src in combination])
+            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
 
     
     
