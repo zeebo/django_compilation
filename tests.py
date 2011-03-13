@@ -1,5 +1,10 @@
 import unittest
 from parser import ParserBase, LxmlParser
+from handlers.registry import Registry
+
+class CompilerTestCase(unittest.TestCase):
+    def assertSortedEqual(self, first, second):
+        self.assertEqual(sorted(first), sorted(second))
 
 def combinations(seq):
     from itertools import combinations as comb
@@ -7,7 +12,7 @@ def combinations(seq):
         for item in comb(seq, n):
             yield item
 
-class CombinationsTests(unittest.TestCase):
+class CombinationsTests(CompilerTestCase):
     def test_empty_seq(self):
         self.assertEqual(list(combinations([])), [])
     
@@ -18,7 +23,7 @@ class CombinationsTests(unittest.TestCase):
                                                 'bcd','acd','abd','abc',
                                                 'abcd']))
 
-class ParserBaseTests(unittest.TestCase):
+class ParserBaseTests(CompilerTestCase):
     def test_create(self):
         _ = ParserBase('')
     def test_not_implemented(self):
@@ -48,7 +53,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_script_files()
-            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
+            self.assertSortedEqual(scripts, (src for _, src in combination))
             
     def test_parse_script_inline_html(self):
         srcs = [
@@ -60,7 +65,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_script_inlines()
-            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
+            self.assertSortedEqual(scripts, (src for _, src in combination))
 
     def test_parse_style_html(self):
         links = [
@@ -73,7 +78,7 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_style_files()
-            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
+            self.assertSortedEqual(scripts, (src for _, src in combination))
             
     def test_parse_style_inline_html(self):
         srcs = [
@@ -85,12 +90,55 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_style_inlines()
-            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
+            self.assertSortedEqual(scripts, (src for _, src in combination))
 
-    
-    
-class LxmlParserTests(unittest.TestCase, ParserTestsAbstract):
+class LxmlParserTests(CompilerTestCase, ParserTestsAbstract):
     parser_class = LxmlParser
+
+class RegistryTests(CompilerTestCase):
+    def setUp(self):
+        Registry.scripts = {}
+        Registry.styles = {}
+        
+        class ScriptHandler(object):
+            __metaclass__ = Registry
+            mime = 'text/javascript'
+            category = 'script'
+        class StyleHandler(object):
+            __metaclass__ = Registry
+            mime = 'text/css'
+            category = 'style'
+        class CoffeeHandler(object):
+            __metaclass__ = Registry
+            mime = 'text/coffeescript'
+            category = 'script'
+    
+    def tearDown(self):
+        Registry.scripts = {}
+        Registry.styles = {}
+    
+    def test_registered_script(self):
+        class NewHandler(object):
+            __metaclass__ = Registry
+            mime = 'text/javascript'
+            category = 'script'
+        
+        self.assertEqual(Registry.scripts['text/javascript'], NewHandler)
+    
+    def test_registered_style(self):
+        class NewHandler(object):
+            __metaclass__ = Registry
+            mime = 'text/css'
+            category = 'style'
+        
+        self.assertEqual(Registry.styles['text/css'], NewHandler)
+    
+    def test_registry_style_mimes(self):
+        self.assertSortedEqual(Registry.style_mimes(), ['text/css'])
+    
+    def test_registry_script_mimes(self):
+        self.assertSortedEqual(Registry.script_mimes(), ['text/javascript', 'text/coffeescript'])
+
 
 if __name__ == '__main__':
     unittest.main()
