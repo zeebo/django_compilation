@@ -39,10 +39,10 @@ class ParserTestsAbstract(object):
     
     def test_parse_script_html(self):
         links = [
-            ("<link type=\"text/javascript\" href=\"/test/hello.js\" />", '/test/hello.js'),
-            ("<link type=\"text/coffeescript\" href=\"/test/hello.coffee\" />", '/test/hello.coffee'),
-            ("<script type=\"text/javascript\" src=\"/test/hello.js\"></script>", '/test/hello.js'),
-            ("<script type=\"text/coffeescript\" src=\"/test/hello.coffee\"></script>", '/test/hello.coffee'),
+            ("<link type=\"text/javascript\" href=\"/test/hello.js\" />", ('/test/hello.js', 'text/javascript')),
+            ("<link type=\"text/coffeescript\" href=\"/test/hello.coffee\" />", ('/test/hello.coffee', 'text/coffeescript')),
+            ("<script type=\"text/javascript\" src=\"/test/hello.js\"></script>", ('/test/hello.js', 'text/javascript')),
+            ("<script type=\"text/coffeescript\" src=\"/test/hello.coffee\"></script>", ('/test/hello.coffee', 'text/coffeescript')),
         ]
         for combination in combinations(links):
             html = '\n'.join(link for link, src in combination)
@@ -52,9 +52,9 @@ class ParserTestsAbstract(object):
             
     def test_parse_script_inline_html(self):
         srcs = [
-            ("<script type=\"text/javascript\">//inline js</script>", '//inline js'),
-            ("<script type=\"text/coffeescript\">//inline coffee</script>", '//inline coffee'),
-            ("<script type=\"text/undefinedscript\">//inline gobbldygook</script>", '//inline gobbldygook'),
+            ("<script type=\"text/javascript\">//inline js</script>", ('//inline js', 'text/javascript')),
+            ("<script type=\"text/coffeescript\">//inline coffee</script>", ('//inline coffee', 'text/coffeescript')),
+            ("<script type=\"text/undefinedscript\">//inline gobbldygook</script>", ('//inline gobbldygook', 'text/undefinedscript')),
         ]
         for combination in combinations(srcs):
             html = '\n'.join(link for link, src in combination)
@@ -64,10 +64,10 @@ class ParserTestsAbstract(object):
 
     def test_parse_style_html(self):
         links = [
-            ("<link type=\"text/css\" href=\"/test/hello.css\" />", '/test/hello.css'),
-            ("<link type=\"text/less\" href=\"/test/hello.less\" />", '/test/hello.less'),
-            ("<style type=\"text/css\" src=\"/test/hello.css\" />", '/test/hello.css'),
-            ("<style type=\"text/sass\" src=\"/test/hello.sass\" />", '/test/hello.sass'),
+            ("<link type=\"text/css\" href=\"/test/hello.css\" />", ('/test/hello.css', 'text/css')),
+            ("<link type=\"text/less\" href=\"/test/hello.less\" />", ('/test/hello.less', 'text/less')),
+            ("<style type=\"text/css\" src=\"/test/hello.css\" />", ('/test/hello.css', 'text/css')),
+            ("<style type=\"text/sass\" src=\"/test/hello.sass\" />", ('/test/hello.sass', 'text/sass')),
         ]
         for combination in combinations(links):
             html = '\n'.join(link for link, src in combination)
@@ -77,9 +77,9 @@ class ParserTestsAbstract(object):
             
     def test_parse_style_inline_html(self):
         srcs = [
-            ("<style type=\"text/css\">inline css</style>", 'inline css'),
-            ("<style type=\"text/sass\">inline sass</style>", 'inline sass'),
-            ("<style type=\"text/less\">inline less</style>", 'inline less'),
+            ("<style type=\"text/css\">inline css</style>", ('inline css', 'text/css')),
+            ("<style type=\"text/sass\">inline sass</style>", ('inline sass', 'text/sass')),
+            ("<style type=\"text/less\">inline less</style>", ('inline less', 'text/less')),
         ]
         for combination in combinations(srcs):
             html = '\n'.join(link for link, src in combination)
