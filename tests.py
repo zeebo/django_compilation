@@ -48,20 +48,45 @@ class ParserTestsAbstract(object):
             html = '\n'.join(link for link, src in combination)
             p = self.parser_class(html)
             scripts = p.get_script_files()
-            self.assertEqual(sorted(scripts), sorted(src for _, src in combination))
+            self.assertEqual(scripts, [src for _, src in combination])
             
     def test_parse_script_inline_html(self):
         srcs = [
-            "<script type=\"text/javascript\">//inline js</script>",
-            "<script type=\"text/coffeescript\">//inline coffee</script>"
+            ("<script type=\"text/javascript\">//inline js</script>", '//inline js'),
+            ("<script type=\"text/coffeescript\">//inline coffee</script>", '//inline coffee'),
+            ("<script type=\"text/undefinedscript\">//inline gobbldygook</script>", '//inline gobbldygook'),
         ]
-        assert False
+        for combination in combinations(srcs):
+            html = '\n'.join(link for link, src in combination)
+            p = self.parser_class(html)
+            scripts = p.get_script_inlines()
+            self.assertEqual(scripts, [src for _, src in combination])
 
     def test_parse_style_html(self):
-        assert False
-
+        links = [
+            ("<link type=\"text/css\" href=\"/test/hello.css\" />", '/test/hello.css'),
+            ("<link type=\"text/less\" href=\"/test/hello.less\" />", '/test/hello.less'),
+            ("<style type=\"text/css\" src=\"/test/hello.css\" />", '/test/hello.css'),
+            ("<style type=\"text/sass\" src=\"/test/hello.sass\" />", '/test/hello.sass'),
+        ]
+        for combination in combinations(links):
+            html = '\n'.join(link for link, src in combination)
+            p = self.parser_class(html)
+            scripts = p.get_style_files()
+            self.assertEqual(scripts, [src for _, src in combination])
+            
     def test_parse_style_inline_html(self):
-        assert False
+        srcs = [
+            ("<style type=\"text/css\">inline css</style>", 'inline css'),
+            ("<style type=\"text/sass\">inline sass</style>", 'inline sass'),
+            ("<style type=\"text/less\">inline less</style>", 'inline less'),
+        ]
+        for combination in combinations(srcs):
+            html = '\n'.join(link for link, src in combination)
+            p = self.parser_class(html)
+            scripts = p.get_style_inlines()
+            self.assertEqual(scripts, [src for _, src in combination])
+
     
     
 class LxmlParserTests(unittest.TestCase, ParserTestsAbstract):
