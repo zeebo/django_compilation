@@ -37,6 +37,13 @@ class ParserBaseTests(CompilerTestCase):
         self.assertRaises(NotImplementedError, getattr, a, 'tree') #property
 
 class ParserTestsAbstract(object):
+    def check_combinations(self, data, call):
+        for combination in combinations(data):
+            trial_data = '\n'.join(node for node, _ in combination)
+            p = self.parser_class(trial_data)
+            returned = getattr(p, call)()
+            self.assertSortedEqual(returned, (retval for _, retval in combination))
+    
     def test_create(self):
         _ = self.parser_class('')
     
@@ -45,54 +52,38 @@ class ParserTestsAbstract(object):
         _ = p.tree
     
     def test_parse_script_html(self):
-        links = [
+        data = [
             ("<link type=\"text/javascript\" href=\"/test/hello.js\" />", ('/test/hello.js', 'text/javascript')),
             ("<link type=\"text/coffeescript\" href=\"/test/hello.coffee\" />", ('/test/hello.coffee', 'text/coffeescript')),
             ("<script type=\"text/javascript\" src=\"/test/hello.js\"></script>", ('/test/hello.js', 'text/javascript')),
             ("<script type=\"text/coffeescript\" src=\"/test/hello.coffee\"></script>", ('/test/hello.coffee', 'text/coffeescript')),
         ]
-        for combination in combinations(links):
-            html = '\n'.join(link for link, src in combination)
-            p = self.parser_class(html)
-            scripts = p.get_script_files()
-            self.assertSortedEqual(scripts, (src for _, src in combination))
+        self.check_combinations(data, 'get_script_files')
             
     def test_parse_script_inline_html(self):
-        srcs = [
+        data = [
             ("<script type=\"text/javascript\">//inline js</script>", ('//inline js', 'text/javascript')),
             ("<script type=\"text/coffeescript\">//inline coffee</script>", ('//inline coffee', 'text/coffeescript')),
             ("<script type=\"text/undefinedscript\">//inline gobbldygook</script>", ('//inline gobbldygook', 'text/undefinedscript')),
         ]
-        for combination in combinations(srcs):
-            html = '\n'.join(link for link, src in combination)
-            p = self.parser_class(html)
-            scripts = p.get_script_inlines()
-            self.assertSortedEqual(scripts, (src for _, src in combination))
+        self.check_combinations(data, 'get_script_inlines')
 
     def test_parse_style_html(self):
-        links = [
+        data = [
             ("<link type=\"text/css\" href=\"/test/hello.css\" />", ('/test/hello.css', 'text/css')),
             ("<link type=\"text/less\" href=\"/test/hello.less\" />", ('/test/hello.less', 'text/less')),
             ("<style type=\"text/css\" src=\"/test/hello.css\" />", ('/test/hello.css', 'text/css')),
             ("<style type=\"text/sass\" src=\"/test/hello.sass\" />", ('/test/hello.sass', 'text/sass')),
         ]
-        for combination in combinations(links):
-            html = '\n'.join(link for link, src in combination)
-            p = self.parser_class(html)
-            scripts = p.get_style_files()
-            self.assertSortedEqual(scripts, (src for _, src in combination))
+        self.check_combinations(data, 'get_style_files')
             
     def test_parse_style_inline_html(self):
-        srcs = [
+        data = [
             ("<style type=\"text/css\">inline css</style>", ('inline css', 'text/css')),
             ("<style type=\"text/sass\">inline sass</style>", ('inline sass', 'text/sass')),
             ("<style type=\"text/less\">inline less</style>", ('inline less', 'text/less')),
         ]
-        for combination in combinations(srcs):
-            html = '\n'.join(link for link, src in combination)
-            p = self.parser_class(html)
-            scripts = p.get_style_inlines()
-            self.assertSortedEqual(scripts, (src for _, src in combination))
+        self.check_combinations(data, 'get_style_inlines')
 
 class LxmlParserTests(CompilerTestCase, ParserTestsAbstract):
     parser_class = LxmlParser
@@ -156,6 +147,17 @@ class TestBaseHandler(CompilerTestCase):
     
     def test_invalid_mode(self):
         self.assertRaises(ValueError, BaseHandler, 'invalid', 'invalid')
+    
+    def test_calls_pre_insert(self):
+        class MyHandler(BaseHandler):
+            mime = 'text/css'
+            category = 'style'
+            
+            def pre_insert(self):
+                raise Exception
+        
+        handler = MyHandler('test', 'content')
+        self.assertRaises(Exception, handler.call_pre_insert)
 
 
 if __name__ == '__main__':
