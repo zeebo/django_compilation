@@ -1,3 +1,6 @@
+#File should never be imported directly. Import the Registry object and it will
+#find all of the classes defined in this file.
+
 from base import BaseHandler
 
 class JavascriptHandler(BaseHandler):

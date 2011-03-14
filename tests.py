@@ -145,6 +145,11 @@ class TestBaseHandler(CompilerTestCase):
         handler = BaseHandler('test', 'content')
         self.assertEqual(handler.content, 'test')
     
+    def test_read_url(self):
+        #Passing test until I figure out how to leverage the django url system
+        #to find what file a url points to. Check with django_compressor?
+        pass
+    
     def test_invalid_mode(self):
         self.assertRaises(ValueError, BaseHandler, 'invalid', 'invalid')
     

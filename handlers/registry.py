@@ -1,4 +1,8 @@
 class Registry(type):
+    """
+    Metaclass to register all classes with the mime type they handle.
+    """
+    
     scripts = {}
     styles = {}
     
@@ -30,4 +34,5 @@ class Registry(type):
     def style_mimes(self):
         return self.styles.keys()
 
+#import all the handlers
 import handlers
