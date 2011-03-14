@@ -17,6 +17,14 @@ class BaseHandler(object):
             self.content = handle.read()
     
     def init_with_url(self, data):
+        """
+        Uses the URL to find the media file to be compressed.
+        Should support absolute urls as well as relative urls (limited relative)
+        
+        Based on
+        https://github.com/mintchaos/django_compressor/blob/master/compressor/base.py
+        Compressor.get_filename
+        """
         raise NotImplementedError
     
     def init_with_content(self, data):
