@@ -110,6 +110,17 @@ class RegistryTests(CompilerTestCase):
         Registry.scripts = {}
         Registry.styles = {}
     
+    def test_bad_handler(self):
+        def make_handler(_category='', _mime=''):
+            class NewHandler(object):
+                __metaclass__ = Registry
+                category = _category
+                mime = _mime
+        
+        self.assertRaises(NotImplementedError, make_handler)
+        self.assertRaises(NotImplementedError, make_handler, '', 'mimetype')
+        self.assertRaises(NotImplementedError, make_handler, 'invalid', 'mimetype')
+    
     def test_registered_script(self):
         class NewHandler(object):
             __metaclass__ = Registry
