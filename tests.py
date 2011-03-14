@@ -1,6 +1,8 @@
 import unittest
+import tempfile
 from parser import ParserBase, LxmlParser
 from handlers.registry import Registry
+from handlers.base import BaseHandler
 
 class CompilerTestCase(unittest.TestCase):
     def assertSortedEqual(self, first, second):
@@ -138,6 +140,22 @@ class RegistryTests(CompilerTestCase):
     
     def test_registry_script_mimes(self):
         self.assertSortedEqual(Registry.script_mimes(), ['text/javascript', 'text/coffeescript'])
+
+class TestBaseHandler(CompilerTestCase):
+    def test_read_file(self):
+        temp_file = tempfile.NamedTemporaryFile(mode='w')
+        temp_file.write('test')
+        temp_file.flush()
+        handler = BaseHandler(temp_file.name, 'file')
+        self.assertEqual(handler.content, 'test')
+        temp_file.close()
+    
+    def test_read_content(self):
+        handler = BaseHandler('test', 'content')
+        self.assertEqual(handler.content, 'test')
+    
+    def test_invalid_mode(self):
+        self.assertRaises(ValueError, BaseHandler, 'invalid', 'invalid')
 
 
 if __name__ == '__main__':

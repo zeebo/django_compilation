@@ -30,4 +30,4 @@ class Registry(type):
     def style_mimes(self):
         return self.styles.keys()
 
-from handlers import *
+import handlers

@@ -1,3 +1,5 @@
+from handlers.registry import Registry
+
 class ParserBase(object):
     def __init__(self, content):
         self.content = content
@@ -36,7 +38,10 @@ class LxmlParser(ParserBase):
         """
         
         script_nodes = self.tree.findall('script')
-        return [(node.attrib['src'], node.attrib['type']) for node in script_nodes]
+        link_paths = ['link[@type="%s"]' % mime for mime in Registry.script_mimes()]
+        link_nodes = self.tree.xpath('|'.join(link_paths))
+        return [(node.attrib['src'], node.attrib['type']) for node in script_nodes] + \
+               [(node.attrib['href'], node.attrib['type']) for node in link_nodes]
     
     def get_script_inlines(self):
         """
@@ -54,7 +59,10 @@ class LxmlParser(ParserBase):
         """
         
         style_nodes = self.tree.findall('style')
-        return [(node.attrib['src'], node.attrib['type']) for node in style_nodes]
+        link_paths = ['link[@type="%s"]' % mime for mime in Registry.style_mimes()]
+        link_nodes = self.tree.xpath('|'.join(link_paths))
+        return [(node.attrib['src'], node.attrib['type']) for node in style_nodes] + \
+               [(node.attrib['href'], node.attrib['type']) for node in link_nodes]
         
     def get_style_inlines(self):
         """
