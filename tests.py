@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import contextlib
 from parser import ParserBase, LxmlParser
 from handlers.registry import Registry
 from handlers.base import BaseHandler
@@ -19,11 +20,13 @@ class CombinationsTests(CompilerTestCase):
         self.assertEqual(list(combinations([])), [])
     
     def test_four_items(self):
-        self.assertEqual(set(combinations('abcd')),
+        combs = list(combinations('abcd'))
+        self.assertEqual(set(combs),
                          set(tuple(x) for x in ['a','b','c','d',
                                                 'ab','ac','ad','bc','bd','cd',
                                                 'bcd','acd','abd','abc',
                                                 'abcd']))
+        self.assertEqual(len(combs), 2**4 - 1)
 
 class ParserBaseTests(CompilerTestCase):
     def test_create(self):
@@ -110,6 +113,20 @@ class RegistryTests(CompilerTestCase):
         Registry.scripts = {}
         Registry.styles = {}
     
+    def test_abstract_handler(self):
+        def make_abstract_handler(_mime=''):
+            class TestAbstractHandler(object):
+                __metaclass__ = Registry
+                category = 'abstract'
+                mime = _mime
+        
+        self.assertRaises(NotImplementedError, make_abstract_handler, 'mime')
+        
+        before_script, before_style = Registry.scripts, Registry.styles
+        make_abstract_handler()
+        self.assertEqual(before_script, Registry.scripts)
+        self.assertEqual(before_style, Registry.styles)
+    
     def test_bad_handler(self):
         def make_handler(_category='', _mime=''):
             class NewHandler(object):
@@ -143,24 +160,65 @@ class RegistryTests(CompilerTestCase):
     def test_registry_script_mimes(self):
         self.assertSortedEqual(Registry.script_mimes(), ['text/javascript', 'text/coffeescript'])
 
+@contextlib.contextmanager
+def django_settings(settings = {}):
+    #There be magic here!
+    import imp, sys
+    
+    base_settings = {
+        'MEDIA_ROOT': '/',
+        'MEDIA_URL': '/test/',
+    }
+    
+    base_settings.update(settings)
+    
+    #Gonna be hacking on the modules. Make a backup
+    module_backup = sys.modules
+    
+    #Create some fake django modules
+    django = imp.new_module('django')
+    conf = imp.new_module('conf')
+    
+    #Make the settings object and stick it in the conf module
+    conf.__dict__.update({
+        'settings': type('settings', (object,), base_settings)
+    })
+    
+    #Stick conf in the django module
+    django.__dict__.update({'conf': conf})
+    
+    #Add the modules in directly (they appear as builtin)
+    sys.modules.update({
+        'django': django,
+        'django.conf': conf,
+    })
+    
+    #Ready to test!
+    yield
+    
+    #Context over, reset modules
+    sys.modules = module_backup
+
 class TestBaseHandler(CompilerTestCase):
     def test_read_file(self):
-        temp_file = tempfile.NamedTemporaryFile(mode='w')
-        temp_file.write('test')
-        temp_file.flush()
-        handler = BaseHandler(temp_file.name, 'file')
-        self.assertEqual(handler.content, 'test')
-        temp_file.close()
+        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+            temp_file.write('test')
+            temp_file.flush()
+            handler = BaseHandler(temp_file.name, 'file')
+            self.assertEqual(handler.content, 'test')
     
     def test_read_content(self):
         handler = BaseHandler('test', 'content')
         self.assertEqual(handler.content, 'test')
     
-    def test_read_url(self):
-        #Passing test until I figure out how to leverage the django url system
-        #to find what file a url points to. Check with django_compressor?
-        pass
-    
+    def test_read_django_url(self):
+        with django_settings():
+            with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+                temp_file.write('test')
+                temp_file.flush()
+                handler = BaseHandler('/test%s' % temp_file.name, 'url')
+                self.assertEqual(handler.content, 'test')
+        
     def test_invalid_mode(self):
         self.assertRaises(ValueError, BaseHandler, 'invalid', 'invalid')
     

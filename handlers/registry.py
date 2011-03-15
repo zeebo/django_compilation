@@ -9,15 +9,19 @@ class Registry(type):
     def __new__(meta, classname, bases, class_dict):
         new_class = type.__new__(meta, classname, bases, class_dict)
         
-        #Check for the base class and ignore it
-        if classname == 'BaseHandler':
-            return new_class
-        
         if 'mime' not in class_dict or 'category' not in class_dict:
             raise NotImplementedError('Types must implement mime and category')
         
-        if class_dict['category'] not in ['script', 'style']:
+        if class_dict['category'] not in ['script', 'style', 'abstract']:
             raise NotImplementedError('Category must be script or style')
+        
+        #If abstract, don't register
+        if class_dict['category'] == 'abstract':
+            #assert that we don't have a mime type
+            if class_dict['mime'] != '':
+                raise NotImplementedError('Abstract base handlers should not define a mime type')
+            
+            return new_class
         
         if class_dict['category'] == 'script':
             meta.scripts[class_dict['mime']] = new_class
