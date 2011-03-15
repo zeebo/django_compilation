@@ -10,11 +10,12 @@ class BaseHandler(object):
         if mode not in ['file', 'url', 'content']:
             raise ValueError('Invalid mode')
         
+        self._content = None
+        self._file_path = None
         getattr(self, 'init_with_%s' % mode)(data)
     
     def init_with_file(self, data):
-        with open(data, 'r') as handle:
-            self.content = handle.read()
+        self._file_path = data
     
     def init_with_url(self, data):
         """
@@ -37,12 +38,36 @@ class BaseHandler(object):
         path = data[len(settings.MEDIA_URL):]
         file_path = os.path.join(settings.MEDIA_ROOT, path)
         
-        self.init_with_file(file_path)
+        self._file_path = file_path
     
     def init_with_content(self, data):
-        self.content = data
+        self._content = data
     
     def call_pre_insert(self):
         if hasattr(self, 'pre_insert') and callable(self.pre_insert):
             self.pre_insert()
+    
+    @property
+    def content(self):
+        if self._content is not None:
+            return self._content
+        
+        if self._file_path is None:
+            raise ValueError('No content in this handler and no idea where to get any')
+        
+        with open(self._file_path) as handle:
+            self._content = handle.read()
+        
+        return self._content
+    
+    @property
+    def hash(self):
+        if self._content is None and self._file_path is None:
+            raise ValueError('No content in this handler and no idea where to get any')
+        
+        import hashlib, os.path
+        if self._file_path is not None:
+            return hashlib.sha1(str(os.path.getmtime(self._file_path))).hexdigest()
+        
+        return hashlib.sha1(self._content).hexdigest()
     

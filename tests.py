@@ -199,6 +199,20 @@ def django_settings(settings = {}):
     #Context over, reset modules
     sys.modules = module_backup
 
+@contextlib.contextmanager
+def open_exception(file_check):
+    import __builtin__
+    old_open = __builtin__.open
+    
+    def raises(filename, *args, **kwargs):
+        if filename == file_check:
+            raise Exception('Data opened before requested')
+        return old_open(filename, *args, **kwargs)
+    
+    __builtin__.open = raises
+    yield
+    __builtin__.open = old_open
+
 class TestBaseHandler(CompilerTestCase):
     def test_read_file(self):
         with tempfile.NamedTemporaryFile(mode='w') as temp_file:
@@ -232,7 +246,29 @@ class TestBaseHandler(CompilerTestCase):
         
         handler = MyHandler('test', 'content')
         self.assertRaises(Exception, handler.call_pre_insert)
-
+    
+    def test_lazy_read(self):
+        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+            with open_exception(temp_file.name):
+                temp_file.write('test')
+                temp_file.flush()
+            
+                handler = BaseHandler(temp_file.name, 'file') #No exception yet
+                self.assertRaises(Exception, getattr, handler, 'content') #Read when requested
+    
+    def test_hash(self):
+        import hashlib
+        import os.path
+        handler = BaseHandler('test', 'content')
+        self.assertEqual(hashlib.sha1('test').hexdigest(), handler.hash)
+        
+        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+            with open_exception(temp_file.name): #Don't allow it to open the file for the hash
+                temp_file.write('test')
+                temp_file.flush()
+                
+                handler = BaseHandler(temp_file.name, 'file')
+                self.assertEqual(hashlib.sha1(str(os.path.getmtime(temp_file.name))).hexdigest(), handler.hash)
 
 if __name__ == '__main__':
     unittest.main()
