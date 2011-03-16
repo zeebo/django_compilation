@@ -5,6 +5,9 @@ from parser import ParserBase, LxmlParser
 from handlers.registry import Registry
 from handlers.base import BaseHandler
 
+class TestException(Exception):
+    pass
+
 class CompilerTestCase(unittest.TestCase):
     def assertSortedEqual(self, first, second):
         self.assertEqual(sorted(first), sorted(second))
@@ -200,13 +203,31 @@ def django_settings(settings = {}):
     sys.modules = module_backup
 
 @contextlib.contextmanager
+def django_template():
+    import imp, sys
+    module_backup = sys.modules
+    django = imp.new_module('django')
+    template = type('template', (object,), {
+        'Node': object,
+        'Library': classmethod(lambda x: type('tag', (object, ), {
+            'tag': classmethod(lambda x, y, z: None)
+        }))
+    })
+    django.__dict__.update({'template':template})
+    sys.modules.update({
+        'django':django
+    })
+    yield
+    sys.modules = module_backup
+
+@contextlib.contextmanager
 def open_exception(file_check):
     import __builtin__
     old_open = __builtin__.open
     
     def raises(filename, *args, **kwargs):
         if filename == file_check:
-            raise Exception('Data opened before requested')
+            raise TestException('Data opened before requested')
         return old_open(filename, *args, **kwargs)
     
     __builtin__.open = raises
@@ -242,10 +263,10 @@ class TestBaseHandler(CompilerTestCase):
             category = 'style'
             
             def pre_insert(self):
-                raise Exception
+                raise TestException
         
         handler = MyHandler('test', 'content')
-        self.assertRaises(Exception, handler.call_pre_insert)
+        self.assertRaises(TestException, handler.call_pre_insert)
     
     def test_lazy_read(self):
         with tempfile.NamedTemporaryFile(mode='w') as temp_file:
@@ -254,7 +275,7 @@ class TestBaseHandler(CompilerTestCase):
                 temp_file.flush()
             
                 handler = BaseHandler(temp_file.name, 'file') #No exception yet
-                self.assertRaises(Exception, getattr, handler, 'content') #Read when requested
+                self.assertRaises(TestException, getattr, handler, 'content') #Read when requested
     
     def test_hash(self):
         import hashlib
@@ -270,5 +291,50 @@ class TestBaseHandler(CompilerTestCase):
                 handler = BaseHandler(temp_file.name, 'file')
                 self.assertEqual(hashlib.sha1(str(os.path.getmtime(temp_file.name))).hexdigest(), handler.hash)
 
+class MockNodelist(object):
+    def __init__(self, retval):
+        self.retval = retval
+    def render(self, *args, **kwargs):
+        return self.retval
+
+class TestTemplateTag(CompilerTestCase):
+    def setUp(self):
+        Registry.scripts = {}
+        Registry.styles = {}
+        
+        with django_template():
+            from templatetags.compiler import CompilerNode
+            self.CompilerNode = CompilerNode
+    
+    def test_handlers_created_style_inline(self):
+        #Could use mocking, decided not to so this test has dependencies
+        class MyHandler(BaseHandler):
+            mime = 'text/test'
+            category = 'style'
+            
+            def __init__(self, *args, **kwargs):
+                raise TestException
+        
+        html = "<style type=\"text/test\">testing</style>"
+        nodelist = MockNodelist(html)
+        
+        compiler_node = self.CompilerNode(nodelist)
+        self.assertRaises(TestException, compiler_node.render, None)
+
+    def test_handlers_created_script_inline(self):
+        #Could use mocking, decided not to so this test has dependencies
+        class MyHandler(BaseHandler):
+            mime = 'text/test'
+            category = 'script'
+            
+            def __init__(self, *args, **kwargs):
+                raise TestException
+        
+        html = "<script type=\"text/test\">testing</script>"
+        nodelist = MockNodelist(html)
+        
+        compiler_node = self.CompilerNode(nodelist)
+        self.assertRaises(TestException, compiler_node.render, None)
+    
 if __name__ == '__main__':
     unittest.main()
