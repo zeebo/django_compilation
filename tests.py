@@ -70,7 +70,8 @@ class CachingPropertyTests(CompilerTestCase):
 
 class ParserBaseTests(CompilerTestCase):
     def test_create(self):
-        _ = ParserBase('')
+        ParserBase('')
+    
     def test_not_implemented(self):
         a = ParserBase('')
         
@@ -93,7 +94,7 @@ class ParserTestsAbstract(object):
             self.assertSortedEqual(returned, (retval for _, retval in combination))
     
     def test_create(self):
-        _ = self.parser_class('')
+        self.parser_class('')
     
     def test_inline_script_not_captured_as_url(self):
         parser = self.parser_class('<script type="text/javascript">Inline</script>')
