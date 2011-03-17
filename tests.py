@@ -339,6 +339,30 @@ def open_exception(file_check):
     yield
     __builtin__.open = old_open
 
+@contextlib.contextmanager
+def open_redirector(handle_maker):
+    import __builtin__
+    old_open = __builtin__.open
+    
+    def new_open(filename, *args, **kwargs):
+        handle = handle_maker(filename)
+        if handle is not None:
+            return handle
+        return old_open(filename, *args, **kwargs)
+    
+    __builtin__.open = new_open
+    yield
+    __builtin__.open = old_open
+
+@contextlib.contextmanager
+def modified_time(time = ''):
+    import sys
+    new_mtime = lambda x: time
+    old_mtime = sys.modules['os.path'].getmtime
+    sys.modules['os.path'].getmtime = new_mtime
+    yield
+    sys.modules['os.path'].getmtime = old_mtime
+
 class TestBaseHandler(CompilerTestCase):
     def test_read_file(self):
         with tempfile.NamedTemporaryFile(mode='w') as temp_file:
@@ -368,7 +392,7 @@ class TestBaseHandler(CompilerTestCase):
     
     def test_calls_pre_insert(self):
         class MyHandler(BaseHandler):
-            mime = 'text/css'
+            mime = 'text/test'
             category = 'style'
             
             def pre_insert(self):
@@ -406,6 +430,12 @@ class MockNodelist(object):
     def render(self, *args, **kwargs):
         return self.retval
 
+def make_named_files(count = 1):
+    files = [func(mode='w') for func in [tempfile.NamedTemporaryFile]*count]
+    if count == 1:
+        return files[0]
+    return files
+
 class TestTemplateTag(CompilerTestCase):
     def setUp(self):
         class MyScriptHandler(BaseHandler):
@@ -436,7 +466,7 @@ class TestTemplateTag(CompilerTestCase):
         Registry.delete_handler(self.my_style_handler)
     
     def test_handlers_created_style_inline(self):
-        #Could use mocking, decided not to so this test has dependencies        
+        #Could use mocking, decided not to so this test has dependencies
         html = "<style type=\"text/test\">testing</style>"
         nodelist = MockNodelist(html)
         
@@ -474,6 +504,165 @@ class TestTemplateTag(CompilerTestCase):
             nodelist = MockNodelist(html)
             compiler_node = CompilerNode(nodelist)
             self.assertRaises(ImproperlyConfigured, compiler_node.render, None)
+    
+    def test_scripts_inline_compiled(self):
+        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+            read_handle = open(temp_file.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/js' in filename:
+                    return temp_file
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener)):
+                from templatetags.compiler import CompilerNode
+                html = "<script type=\"text/javascript\">inline</script>"
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertEqual(read_handle.read(), 'inline\n')
+    
+    def test_scripts_file_compiled(self):
+        with contextlib.nested(*make_named_files(2)) as (js_file, temp_file):
+            js_file.write('file')
+            js_file.flush()
+            js_read_handle = open(js_file.name, 'r')
+            temp_read_handle = open(temp_file.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/js' in filename:
+                    return temp_file
+                if 'media/test.js' in filename:
+                    return js_read_handle
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time()):
+                from templatetags.compiler import CompilerNode
+                html = "<link type=\"text/javascript\" href=\"/media/test.js\" />"
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertEqual(temp_read_handle.read(), 'file\n')
+    
+    def test_scripts_compiled(self):
+        with contextlib.nested(*make_named_files(2)) as (js_file, temp_file):
+            js_file.write('file')
+            js_file.flush()
+            js_read_handle = open(js_file.name, 'r')
+            temp_read_handle = open(temp_file.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/js' in filename:
+                    return temp_file
+                if 'media/test.js' in filename:
+                    return js_read_handle
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time()):
+                from templatetags.compiler import CompilerNode
+                html = """
+                    <link type="text/javascript" href="/media/test.js" />
+                    <script type="text/javascript">inline</script>
+                """
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertSortedEqual(temp_read_handle.read().strip().split('\n'), ['file', 'inline'])
+    
+    def test_styles_inline_compiled(self):
+        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+            read_handle = open(temp_file.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/css' in filename:
+                    return temp_file
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener)):
+                from templatetags.compiler import CompilerNode
+                html = "<style type=\"text/css\">inline</style>"
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertEqual(read_handle.read(), 'inline\n')
+
+    def test_styles_file_compiled(self):
+        with contextlib.nested(*make_named_files(2)) as (css_file, temp_file):
+            css_file.write('file')
+            css_file.flush()
+            css_read_handle = open(css_file.name, 'r')
+            temp_read_handle = open(temp_file.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/css' in filename:
+                    return temp_file
+                if 'media/test.css' in filename:
+                    return css_read_handle
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time()):
+                from templatetags.compiler import CompilerNode
+                html = "<link type=\"text/css\" href=\"/media/test.css\" />"
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertEqual(temp_read_handle.read(), 'file\n')
+
+    def test_styles_compiled(self):
+        with contextlib.nested(*make_named_files(2)) as (css_file, temp_file):
+            css_file.write('file')
+            css_file.flush()
+            css_read_handle = open(css_file.name, 'r')
+            temp_read_handle = open(temp_file.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/css' in filename:
+                    return temp_file
+                if 'media/test.css' in filename:
+                    return css_read_handle
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time()):
+                from templatetags.compiler import CompilerNode
+                html = """
+                    <link type="text/css" href="/media/test.css" />
+                    <style type="text/css">inline</style>
+                """
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertSortedEqual(temp_read_handle.read().strip().split('\n'), ['file', 'inline'])
+
+    def test_everything_compiled(self):
+        with contextlib.nested(*make_named_files(4)) as (css_file, js_file, css_out, js_out):
+            css_file.write('cssfile')
+            css_file.flush()
+            js_file.write('jsfile')
+            js_file.flush()
+            
+            css_read_handle = open(css_file.name, 'r')
+            js_read_handle = open(js_file.name, 'r')
+            
+            css_out_handle = open(css_out.name, 'r')
+            js_out_handle = open(js_out.name, 'r')
+            def temp_opener(filename):
+                if 'media/comp/css' in filename:
+                    return css_out
+                if 'media/comp/js' in filename:
+                    return js_out
+                if 'media/test.css' in filename:
+                    return css_read_handle
+                if 'media/test.js' in filename:
+                    return js_read_handle
+                return None
+            
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time()):
+                from templatetags.compiler import CompilerNode
+                html = """
+                    <link type="text/css" href="/media/test.css" />
+                    <style type="text/css">inline css</style>
+                    <link type="text/javascript" href="/media/test.js" />
+                    <script type="text/javascript">inline js</script>
+                """
+                nodelist = MockNodelist(html)
+                compiler_node = CompilerNode(nodelist)
+                compiler_node.render(None)
+                self.assertSortedEqual(css_out_handle.read().strip().split('\n'), ['cssfile', 'inline css'])
+                self.assertSortedEqual(js_out_handle.read().strip().split('\n'), ['jsfile', 'inline js'])
 
 if __name__ == '__main__':
     unittest.main()
