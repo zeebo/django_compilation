@@ -423,7 +423,7 @@ class TestTemplateTag(CompilerTestCase):
         self.my_script_handler = MyScriptHandler
         self.my_style_handler = MyStyleHandler
         
-        with django_template(), django_settings({'COMPILER_ROOT':'test'}), django_exceptions():
+        with contextlib.nested(django_template(), django_settings({'COMPILER_ROOT':'test'}), django_exceptions()):
             from templatetags.compiler import CompilerNode
             self.CompilerNode = CompilerNode
         
@@ -457,7 +457,7 @@ class TestTemplateTag(CompilerTestCase):
         self.assertRaises(ValueError, compiler_node.render, None)
     
     def test_bad_settings_no_compiler_root(self):
-        with django_exceptions(), django_settings():
+        with contextlib.nested(django_exceptions(), django_settings()):
             from django.core.exceptions import ImproperlyConfigured
             from templatetags.compiler import CompilerNode
             html = "<script type=\"text/javascript\">testing</script>"
@@ -466,7 +466,7 @@ class TestTemplateTag(CompilerTestCase):
             self.assertRaises(ImproperlyConfigured, compiler_node.render, None)
         
     def test_bad_settings_compiler_root_dne(self):
-        with django_exceptions(), django_settings({'COMPILER_ROOT':'directory/doesnt/exist'}):
+        with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'directory/doesnt/exist'})):
             from django.core.exceptions import ImproperlyConfigured
             from templatetags.compiler import CompilerNode
             html = "<script type=\"text/javascript\">testing</script>"
