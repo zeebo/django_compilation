@@ -61,16 +61,7 @@ class CompilerNode(template.Node):
     def __init__(self, nodelist):
         self.nodelist = nodelist
     def render(self, context):
-        html = self.nodelist.render(context)
-        #Now that we have the html text, do the logic.
-        
-        from parser import LxmlParser
-        from handlers.registry import Registry
-        
-        parsed = LxmlParser(html)
-        styles = convert_to_handlers(parsed.style_inlines, parsed.style_files, Registry.styles)
-        scripts = convert_to_handlers(parsed.script_inlines, parsed.script_files, Registry.scripts)
-        
+        #First check if the environment is set up right
         from django.conf import settings
         required_attrs = ('COMPILER_ROOT', 'MEDIA_ROOT', 'MEDIA_URL')
         bad_attrs = (attr for attr in required_attrs if not hasattr(settings, attr))
@@ -78,7 +69,7 @@ class CompilerNode(template.Node):
             from django.core.exceptions import ImproperlyConfigured
             raise ImproperlyConfigured('No %s found in django settings' % bad)
         
-        #Check if directory exists
+        #Check if the directories exist
         import os.path
         directory = os.path.join(settings.MEDIA_ROOT, settings.COMPILER_ROOT)
         required_dirs = (directory, os.path.join(directory, 'css'), os.path.join(directory, 'js'))
@@ -86,6 +77,14 @@ class CompilerNode(template.Node):
         for d in bad_dirs:
             from django.core.exceptions import ImproperlyConfigured
             raise ImproperlyConfigured('COMPILER_ROOT directory not found. (%s)' % d)
+        
+        from parser import LxmlParser
+        from handlers.registry import Registry
+        
+        html = self.nodelist.render(context)
+        parsed = LxmlParser(html)
+        styles = convert_to_handlers(parsed.style_inlines, parsed.style_files, Registry.styles)
+        scripts = convert_to_handlers(parsed.script_inlines, parsed.script_files, Registry.scripts)
         
         output = []
         output.append(get_html_tag(scripts, 'script'))

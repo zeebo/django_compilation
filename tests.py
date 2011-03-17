@@ -226,11 +226,14 @@ class RegistryTests(CompilerTestCase):
         Registry.delete_handler(NewHandler)
         self.assertTrue('test/mime' not in Registry.styles)
 
+def del_keys(thing, *keys):
+    for key in keys:
+        if key in thing:
+            del thing[key]
+
 @contextlib.contextmanager
 def django_exceptions():
     import imp, sys
-    
-    module_backup = sys.modules
     
     if 'django' in sys.modules:
         django = sys.modules['django']
@@ -253,8 +256,8 @@ def django_exceptions():
     })
     
     yield
-    
-    sys.modules = module_backup
+    del_keys(sys.modules, 'django', 'django.core', 'django.core.exceptions')
+
 
 @contextlib.contextmanager
 def django_settings(settings = {}):
@@ -267,9 +270,6 @@ def django_settings(settings = {}):
     }
     
     base_settings.update(settings)
-    
-    #Gonna be hacking on the modules. Make a backup
-    module_backup = sys.modules
     
     #Create some fake django modules
     if 'django' in sys.modules:
@@ -296,7 +296,7 @@ def django_settings(settings = {}):
     yield
     
     #Context over, reset modules
-    sys.modules = module_backup
+    del_keys(sys.modules, 'django', 'django.conf')
 
 @contextlib.contextmanager
 def django_template():
@@ -306,7 +306,6 @@ def django_template():
     #  register.tag('compile', do_compile)
     #run without a hitch. Uses a bunch of inline class creations
     import imp, sys
-    module_backup = sys.modules
     if 'django' in sys.modules:
         django = sys.modules['django']
     else:
@@ -323,7 +322,8 @@ def django_template():
         'django':django
     })
     yield
-    sys.modules = module_backup
+
+    del_keys(sys.modules, 'django')
 
 @contextlib.contextmanager
 def open_exception(file_check):
@@ -364,7 +364,7 @@ def modified_time(time = ''):
     sys.modules['os.path'].getmtime = old_mtime
 
 @contextlib.contextmanager
-def paths_exist(paths):
+def paths_exist(*paths):
     import sys
     
     old_exists = sys.modules['os.path'].exists
@@ -449,56 +449,46 @@ def make_named_files(count = 1):
         return files[0]
     return files
 
+@contextlib.contextmanager
+def exception_handler(_category, _mime='text/test'):
+    class MyScriptHandler(BaseHandler):
+        mime = _mime
+        category = _category
+        
+        def __init__(self, *args, **kwargs):
+            raise TestException
+    yield
+    Registry.delete_handler(MyScriptHandler)
+
 class TestTemplateTag(CompilerTestCase):
-    def setUp(self):
-        class MyScriptHandler(BaseHandler):
-            mime = 'text/test'
-            category = 'script'
-            
-            def __init__(self, *args, **kwargs):
-                raise TestException
-        class MyStyleHandler(BaseHandler):
-            mime = 'text/test'
-            category = 'style'
-            
-            def __init__(self, *args, **kwargs):
-                raise TestException
-        
-        self.my_script_handler = MyScriptHandler
-        self.my_style_handler = MyStyleHandler
-        
-        with contextlib.nested(django_template(), django_settings({'COMPILER_ROOT':'test'}), django_exceptions()):
-            from templatetags.compiler import CompilerNode
-            self.CompilerNode = CompilerNode
-        
-        import sys
-        del sys.modules['templatetags.compiler']
-    
-    def tearDown(self):
-        Registry.delete_handler(self.my_script_handler)
-        Registry.delete_handler(self.my_style_handler)
+    def basic_context(self):
+        return contextlib.nested(django_template(), django_settings({'COMPILER_ROOT':'/'}), django_exceptions(), paths_exist('/css', '/js'))
     
     def test_handlers_created_style_inline(self):
-        #Could use mocking, decided not to so this test has dependencies
-        html = "<style type=\"text/test\">testing</style>"
-        nodelist = MockNodelist(html)
-        
-        compiler_node = self.CompilerNode(nodelist)
-        self.assertRaises(TestException, compiler_node.render, None)
+        with contextlib.nested(self.basic_context(), exception_handler('style')):
+            from templatetags.compiler import CompilerNode
+            html = "<style type=\"text/test\">testing</style>"
+            nodelist = MockNodelist(html)
+            
+            compiler_node = CompilerNode(nodelist)
+            self.assertRaises(TestException, compiler_node.render, None)
 
     def test_handlers_created_script_inline(self):
-        #Could use mocking, decided not to so this test has dependencies
-        html = "<script type=\"text/test\">testing</script>"
-        nodelist = MockNodelist(html)
-        
-        compiler_node = self.CompilerNode(nodelist)
-        self.assertRaises(TestException, compiler_node.render, None)
+        with contextlib.nested(self.basic_context(), exception_handler('script')):
+            from templatetags.compiler import CompilerNode
+            html = "<script type=\"text/test\">testing</script>"
+            nodelist = MockNodelist(html)
+            
+            compiler_node = CompilerNode(nodelist)
+            self.assertRaises(TestException, compiler_node.render, None)
     
     def test_invalid_mime(self):
-        html = "<script type=\"invalid/mime\">testing</script>"
-        nodelist = MockNodelist(html)
-        compiler_node = self.CompilerNode(nodelist)
-        self.assertRaises(ValueError, compiler_node.render, None)
+        with self.basic_context():
+            from templatetags.compiler import CompilerNode
+            html = "<script type=\"invalid/mime\">testing</script>"
+            nodelist = MockNodelist(html)
+            compiler_node = CompilerNode(nodelist)
+            self.assertRaises(ValueError, compiler_node.render, None)
     
     def test_bad_settings_no_compiler_root(self):
         with contextlib.nested(django_exceptions(), django_settings()):
@@ -510,7 +500,7 @@ class TestTemplateTag(CompilerTestCase):
             self.assertRaises(ImproperlyConfigured, compiler_node.render, None)
         
     def test_bad_settings_compiler_root_dne(self):
-        with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'directory/doesnt/exist'})):
+        with contextlib.nested(django_exceptions(), django_template(), django_settings({'COMPILER_ROOT':'directory/doesnt/exist'})):
             from django.core.exceptions import ImproperlyConfigured
             from templatetags.compiler import CompilerNode
             html = "<script type=\"text/javascript\">testing</script>"
@@ -526,7 +516,7 @@ class TestTemplateTag(CompilerTestCase):
                     return temp_file
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = "<script type=\"text/javascript\">inline</script>"
                 nodelist = MockNodelist(html)
@@ -547,7 +537,7 @@ class TestTemplateTag(CompilerTestCase):
                     return js_read_handle
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = "<link type=\"text/javascript\" href=\"/media/test.js\" />"
                 nodelist = MockNodelist(html)
@@ -568,7 +558,7 @@ class TestTemplateTag(CompilerTestCase):
                     return js_read_handle
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = """
                     <link type="text/javascript" href="/media/test.js" />
@@ -587,7 +577,7 @@ class TestTemplateTag(CompilerTestCase):
                     return temp_file
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = "<style type=\"text/css\">inline</style>"
                 nodelist = MockNodelist(html)
@@ -608,7 +598,7 @@ class TestTemplateTag(CompilerTestCase):
                     return css_read_handle
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = "<link type=\"text/css\" href=\"/media/test.css\" />"
                 nodelist = MockNodelist(html)
@@ -629,7 +619,7 @@ class TestTemplateTag(CompilerTestCase):
                     return css_read_handle
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = """
                     <link type="text/css" href="/media/test.css" />
@@ -663,7 +653,7 @@ class TestTemplateTag(CompilerTestCase):
                     return js_read_handle
                 return None
             
-            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist(['media/comp', 'media/comp/css', 'media/comp/js'])):
+            with contextlib.nested(django_exceptions(), django_settings({'COMPILER_ROOT':'comp', 'MEDIA_ROOT':'media', 'MEDIA_URL':'/media/'}), open_redirector(temp_opener), modified_time(), paths_exist('media/comp', 'media/comp/css', 'media/comp/js')):
                 from templatetags.compiler import CompilerNode
                 html = """
                     <link type="text/css" href="/media/test.css" />
