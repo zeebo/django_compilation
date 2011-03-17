@@ -36,26 +36,39 @@ class ParserBaseTests(CompilerTestCase):
         _ = ParserBase('')
     def test_not_implemented(self):
         a = ParserBase('')
-        self.assertRaises(NotImplementedError, a.get_script_files)
-        self.assertRaises(NotImplementedError, a.get_script_inlines)
-        self.assertRaises(NotImplementedError, a.get_style_files)
-        self.assertRaises(NotImplementedError, a.get_style_inlines)
-        self.assertRaises(NotImplementedError, getattr, a, 'tree') #property
+        
+        #properties
+        self.assertRaises(NotImplementedError, getattr, a, 'script_files')
+        self.assertRaises(NotImplementedError, getattr, a, 'script_inlines')
+        self.assertRaises(NotImplementedError, getattr, a, 'style_files')
+        self.assertRaises(NotImplementedError, getattr, a, 'style_inlines')
+        self.assertRaises(NotImplementedError, getattr, a, 'styles')
+        self.assertRaises(NotImplementedError, getattr, a, 'scripts')
+        self.assertRaises(NotImplementedError, getattr, a, 'nodes')
+        self.assertRaises(NotImplementedError, getattr, a, 'tree') 
 
 class ParserTestsAbstract(object):
     def check_combinations(self, data, call):
         for combination in combinations(data):
             trial_data = '\n'.join(node for node, _ in combination)
             p = self.parser_class(trial_data)
-            returned = getattr(p, call)()
+            returned = getattr(p, call)
             self.assertSortedEqual(returned, (retval for _, retval in combination))
     
     def test_create(self):
         _ = self.parser_class('')
     
-    def test_parse_empty(self):
-        p = self.parser_class('')
-        _ = p.tree
+    def test_inline_script_not_captured_as_url(self):
+        parser = self.parser_class('<script type="text/javascript">Inline</script>')
+        parser.script_files
+        
+    def test_inline_style_not_captured_as_url(self):
+        parser = self.parser_class('<style type="text/css">Inline</style>')
+        parser.style_files
+    
+    def test_invalid_html(self):
+        parser = self.parser_class('<this isnt >fhtm <html <<')
+        self.check_every_attrib(parser)
     
     def test_parse_script_html(self):
         data = [
@@ -64,7 +77,7 @@ class ParserTestsAbstract(object):
             ("<script type=\"text/javascript\" src=\"/test/hello.js\"></script>", ('/test/hello.js', 'text/javascript')),
             ("<script type=\"text/coffeescript\" src=\"/test/hello.coffee\"></script>", ('/test/hello.coffee', 'text/coffeescript')),
         ]
-        self.check_combinations(data, 'get_script_files')
+        self.check_combinations(data, 'script_files')
             
     def test_parse_script_inline_html(self):
         data = [
@@ -72,7 +85,7 @@ class ParserTestsAbstract(object):
             ("<script type=\"text/coffeescript\">//inline coffee</script>", ('//inline coffee', 'text/coffeescript')),
             ("<script type=\"text/undefinedscript\">//inline gobbldygook</script>", ('//inline gobbldygook', 'text/undefinedscript')),
         ]
-        self.check_combinations(data, 'get_script_inlines')
+        self.check_combinations(data, 'script_inlines')
 
     def test_parse_style_html(self):
         data = [
@@ -81,7 +94,7 @@ class ParserTestsAbstract(object):
             ("<style type=\"text/css\" src=\"/test/hello.css\" />", ('/test/hello.css', 'text/css')),
             ("<style type=\"text/sass\" src=\"/test/hello.sass\" />", ('/test/hello.sass', 'text/sass')),
         ]
-        self.check_combinations(data, 'get_style_files')
+        self.check_combinations(data, 'style_files')
             
     def test_parse_style_inline_html(self):
         data = [
@@ -89,7 +102,21 @@ class ParserTestsAbstract(object):
             ("<style type=\"text/sass\">inline sass</style>", ('inline sass', 'text/sass')),
             ("<style type=\"text/less\">inline less</style>", ('inline less', 'text/less')),
         ]
-        self.check_combinations(data, 'get_style_inlines')
+        self.check_combinations(data, 'style_inlines')
+    
+    def test_parse_empty(self):
+        parser = self.parser_class('')
+        self.check_every_attrib(parser)
+    
+    def check_every_attrib(self, parser):
+        parser.script_files
+        parser.script_inlines
+        parser.style_files
+        parser.style_inlines
+        parser.styles
+        parser.scripts
+        parser.nodes
+        parser.tree
 
 class LxmlParserTests(CompilerTestCase, ParserTestsAbstract):
     parser_class = LxmlParser
@@ -162,6 +189,23 @@ class RegistryTests(CompilerTestCase):
     
     def test_registry_script_mimes(self):
         self.assertSortedEqual(Registry.script_mimes(), ['text/javascript', 'text/coffeescript'])
+    
+    def test_registry_delete_handler(self):
+        class NewHandler(object):
+            __metaclass__ = Registry
+            mime = 'test/mime'
+            category = 'script'
+        self.assertTrue('test/mime' in Registry.scripts)
+        Registry.delete_handler(NewHandler)
+        self.assertTrue('test/mime' not in Registry.scripts)
+        
+        class NewHandler(object):
+            __metaclass__ = Registry
+            mime = 'test/mime'
+            category = 'style'
+        self.assertTrue('test/mime' in Registry.styles)
+        Registry.delete_handler(NewHandler)
+        self.assertTrue('test/mime' not in Registry.styles)
 
 @contextlib.contextmanager
 def django_settings(settings = {}):
@@ -299,15 +343,6 @@ class MockNodelist(object):
 
 class TestTemplateTag(CompilerTestCase):
     def setUp(self):
-        Registry.scripts = {}
-        Registry.styles = {}
-        
-        with django_template():
-            from templatetags.compiler import CompilerNode
-            self.CompilerNode = CompilerNode
-    
-    def test_handlers_created_style_inline(self):
-        #Could use mocking, decided not to so this test has dependencies
         class MyHandler(BaseHandler):
             mime = 'text/test'
             category = 'style'
@@ -315,6 +350,17 @@ class TestTemplateTag(CompilerTestCase):
             def __init__(self, *args, **kwargs):
                 raise TestException
         
+        self.my_handler = MyHandler
+        
+        with django_template():
+            from templatetags.compiler import CompilerNode
+            self.CompilerNode = CompilerNode
+    
+    def tearDown(self):
+        Registry.delete_handler(self.my_handler)
+    
+    def test_handlers_created_style_inline(self):
+        #Could use mocking, decided not to so this test has dependencies        
         html = "<style type=\"text/test\">testing</style>"
         nodelist = MockNodelist(html)
         

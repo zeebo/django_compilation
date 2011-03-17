@@ -31,6 +31,13 @@ class Registry(type):
         return new_class
     
     @classmethod
+    def delete_handler(self, handler):
+        if handler.category == 'script':
+            del self.scripts[handler.mime]
+        if handler.category == 'style':
+            del self.styles[handler.mime]
+    
+    @classmethod
     def script_mimes(self):
         return self.scripts.keys()
     
