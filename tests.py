@@ -385,21 +385,29 @@ class MockNodelist(object):
 
 class TestTemplateTag(CompilerTestCase):
     def setUp(self):
-        class MyHandler(BaseHandler):
+        class MyScriptHandler(BaseHandler):
+            mime = 'text/test'
+            category = 'script'
+            
+            def __init__(self, *args, **kwargs):
+                raise TestException
+        class MyStyleHandler(BaseHandler):
             mime = 'text/test'
             category = 'style'
             
             def __init__(self, *args, **kwargs):
                 raise TestException
         
-        self.my_handler = MyHandler
+        self.my_script_handler = MyScriptHandler
+        self.my_style_handler = MyStyleHandler
         
         with django_template():
             from templatetags.compiler import CompilerNode
             self.CompilerNode = CompilerNode
     
     def tearDown(self):
-        Registry.delete_handler(self.my_handler)
+        Registry.delete_handler(self.my_script_handler)
+        Registry.delete_handler(self.my_style_handler)
     
     def test_handlers_created_style_inline(self):
         #Could use mocking, decided not to so this test has dependencies        
