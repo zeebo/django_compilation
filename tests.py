@@ -285,6 +285,11 @@ def django_settings(settings = {}):
 
 @contextlib.contextmanager
 def django_template():
+    #Code to make
+    #  from django import template
+    #  register = template.Library()
+    #  register.tag('compile', do_compile)
+    #run without a hitch. Uses a bunch of inline class creations
     import imp, sys
     module_backup = sys.modules
     django = imp.new_module('django')
@@ -406,13 +411,6 @@ class TestTemplateTag(CompilerTestCase):
 
     def test_handlers_created_script_inline(self):
         #Could use mocking, decided not to so this test has dependencies
-        class MyHandler(BaseHandler):
-            mime = 'text/test'
-            category = 'script'
-            
-            def __init__(self, *args, **kwargs):
-                raise TestException
-        
         html = "<script type=\"text/test\">testing</script>"
         nodelist = MockNodelist(html)
         
