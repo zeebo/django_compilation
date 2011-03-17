@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 import contextlib
-from parser import ParserBase, LxmlParser
+from parser import ParserBase, LxmlParser, caching_property, _sentinal
 from handlers.registry import Registry
 from handlers.base import BaseHandler
 
@@ -30,6 +30,43 @@ class CombinationsTests(CompilerTestCase):
                                                 'bcd','acd','abd','abc',
                                                 'abcd']))
         self.assertEqual(len(combs), 2**4 - 1)
+
+class CachingPropertyTests(CompilerTestCase):
+    def test_only_called_once(self):
+        class TestClass(object):
+            def __init__(self):
+                self._value = _sentinal
+                self.counter = 0
+            
+            @caching_property('_value')
+            def value(self):
+                self.counter += 1
+                return 'evaluated'
+        
+        tester = TestClass()
+        self.assertEqual(tester.counter, 0)
+        tester.value
+        self.assertEqual(tester.counter, 1)
+        tester.value
+        self.assertEqual(tester.counter, 1)
+
+    def test_caches_none(self):
+        class TestClass(object):
+            def __init__(self):
+                self._value = _sentinal
+                self.counter = 0
+            
+            @caching_property('_value')
+            def value(self):
+                self.counter += 1
+                return None
+        
+        tester = TestClass()
+        self.assertEqual(tester.counter, 0)
+        tester.value
+        self.assertEqual(tester.counter, 1)
+        tester.value
+        self.assertEqual(tester.counter, 1)
 
 class ParserBaseTests(CompilerTestCase):
     def test_create(self):
