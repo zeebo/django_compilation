@@ -160,25 +160,12 @@ class LxmlParserTests(CompilerTestCase, ParserTestsAbstract):
 
 class RegistryTests(CompilerTestCase):
     def setUp(self):
-        Registry.scripts = {}
-        Registry.styles = {}
-        
-        class ScriptHandler(object):
-            __metaclass__ = Registry
-            mime = 'text/javascript'
-            category = 'script'
-        class StyleHandler(object):
-            __metaclass__ = Registry
-            mime = 'text/css'
-            category = 'style'
-        class CoffeeHandler(object):
-            __metaclass__ = Registry
-            mime = 'text/coffeescript'
-            category = 'script'
+        self._scripts = Registry.scripts
+        self._styles = Registry.styles
     
     def tearDown(self):
-        Registry.scripts = {}
-        Registry.styles = {}
+        Registry.scripts = self._scripts
+        Registry.styles = self._styles
     
     def test_abstract_handler(self):
         def make_abstract_handler(_mime=''):
@@ -208,24 +195,18 @@ class RegistryTests(CompilerTestCase):
     def test_registered_script(self):
         class NewHandler(object):
             __metaclass__ = Registry
-            mime = 'text/javascript'
+            mime = 'text/test'
             category = 'script'
         
-        self.assertEqual(Registry.scripts['text/javascript'], NewHandler)
+        self.assertEqual(Registry.scripts['text/test'], NewHandler)
     
     def test_registered_style(self):
         class NewHandler(object):
             __metaclass__ = Registry
-            mime = 'text/css'
+            mime = 'text/test'
             category = 'style'
         
-        self.assertEqual(Registry.styles['text/css'], NewHandler)
-    
-    def test_registry_style_mimes(self):
-        self.assertSortedEqual(Registry.style_mimes(), ['text/css'])
-    
-    def test_registry_script_mimes(self):
-        self.assertSortedEqual(Registry.script_mimes(), ['text/javascript', 'text/coffeescript'])
+        self.assertEqual(Registry.styles['text/test'], NewHandler)
     
     def test_registry_delete_handler(self):
         class NewHandler(object):
@@ -243,6 +224,36 @@ class RegistryTests(CompilerTestCase):
         self.assertTrue('test/mime' in Registry.styles)
         Registry.delete_handler(NewHandler)
         self.assertTrue('test/mime' not in Registry.styles)
+
+@contextlib.contextmanager
+def django_exceptions():
+    import imp, sys
+    
+    module_backup = sys.modules
+    
+    if 'django' in sys.modules:
+        django = sys.modules['django']
+    else:
+        django = imp.new_module('django')
+    core = imp.new_module('core')
+    exceptions = imp.new_module('exceptions')
+    
+    class ImproperlyConfigured(Exception):
+        pass
+    
+    exceptions.__dict__.update({'ImproperlyConfigured': ImproperlyConfigured})
+    core.__dict__.update({'exceptions': exceptions})
+    django.__dict__.update({'core': core})
+    
+    sys.modules.update({
+        'django': django,
+        'django.core': core,
+        'django.core.exceptions': exceptions
+    })
+    
+    yield
+    
+    sys.modules = module_backup
 
 @contextlib.contextmanager
 def django_settings(settings = {}):
@@ -339,6 +350,10 @@ class TestBaseHandler(CompilerTestCase):
         handler = BaseHandler('test', 'content')
         self.assertEqual(handler.content, 'test')
     
+    def test_file_outside_media_url(self):
+        with django_settings({'MEDIA_URL': '/nope'}):
+            self.assertRaises(ValueError, BaseHandler, '/test/file', 'url')
+        
     def test_read_django_url(self):
         with django_settings():
             with tempfile.NamedTemporaryFile(mode='w') as temp_file:
@@ -408,9 +423,12 @@ class TestTemplateTag(CompilerTestCase):
         self.my_script_handler = MyScriptHandler
         self.my_style_handler = MyStyleHandler
         
-        with django_template(), django_settings({'COMPILER_ROOT':'test'}):
+        with django_template(), django_settings({'COMPILER_ROOT':'test'}), django_exceptions():
             from templatetags.compiler import CompilerNode
             self.CompilerNode = CompilerNode
+        
+        import sys
+        del sys.modules['templatetags.compiler']
     
     def tearDown(self):
         Registry.delete_handler(self.my_script_handler)
@@ -432,5 +450,29 @@ class TestTemplateTag(CompilerTestCase):
         compiler_node = self.CompilerNode(nodelist)
         self.assertRaises(TestException, compiler_node.render, None)
     
+    def test_invalid_mime(self):
+        html = "<script type=\"invalid/mime\">testing</script>"
+        nodelist = MockNodelist(html)
+        compiler_node = self.CompilerNode(nodelist)
+        self.assertRaises(ValueError, compiler_node.render, None)
+    
+    def test_bad_settings_no_compiler_root(self):
+        with django_exceptions(), django_settings():
+            from django.core.exceptions import ImproperlyConfigured
+            from templatetags.compiler import CompilerNode
+            html = "<script type=\"text/javascript\">testing</script>"
+            nodelist = MockNodelist(html)
+            compiler_node = CompilerNode(nodelist)
+            self.assertRaises(ImproperlyConfigured, compiler_node.render, None)
+        
+    def test_bad_settings_compiler_root_dne(self):
+        with django_exceptions(), django_settings({'COMPILER_ROOT':'directory/doesnt/exist'}):
+            from django.core.exceptions import ImproperlyConfigured
+            from templatetags.compiler import CompilerNode
+            html = "<script type=\"text/javascript\">testing</script>"
+            nodelist = MockNodelist(html)
+            compiler_node = CompilerNode(nodelist)
+            self.assertRaises(ImproperlyConfigured, compiler_node.render, None)
+
 if __name__ == '__main__':
     unittest.main()

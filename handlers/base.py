@@ -33,7 +33,7 @@ class BaseHandler(object):
         from django.conf import settings
         import os
         if not data.startswith(settings.MEDIA_URL):
-            raise ValueError('Unable to determine where the file for \'%s\' is located. URL must begin with \'%s\'' % data, settings.MEDIA_URL)
+            raise ValueError('Unable to determine where the file for \'%s\' is located. URL must begin with \'%s\'' % (data, settings.MEDIA_URL))
         
         path = data[len(settings.MEDIA_URL):]
         file_path = os.path.join(settings.MEDIA_ROOT, path)
