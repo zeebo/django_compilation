@@ -67,6 +67,20 @@ class CachingPropertyTests(CompilerTestCase):
         self.assertEqual(tester.counter, 1)
         tester.value
         self.assertEqual(tester.counter, 1)
+    
+    def test_cache_not_init(self):
+        def counter(n = {'n': 0}):
+            n['n'] += 1
+            return n['n']
+        
+        class TestClass(object):
+            @caching_property('_not_init')
+            def value(self):
+                return counter()
+        
+        tester = TestClass()
+        self.assertEqual(tester.value, 1)
+        self.assertEqual(tester.value, 1)
 
 class ParserBaseTests(CompilerTestCase):
     def test_create(self):

@@ -7,7 +7,7 @@ def caching_property(attribute):
         @property
         @wraps(function)
         def wrapper(self, *args, **kwargs):
-            if getattr(self, attribute) is not _sentinal:
+            if hasattr(self, attribute) and getattr(self, attribute) is not _sentinal:
                 return getattr(self, attribute)
             ret_val = function(self, *args, **kwargs)
             setattr(self, attribute, ret_val)
@@ -18,14 +18,6 @@ def caching_property(attribute):
 class ParserBase(object):
     def __init__(self, content):
         self.content = content
-        self._tree = _sentinal
-        self._script_files = _sentinal
-        self._style_files = _sentinal
-        self._script_inlines = _sentinal
-        self._style_inlines = _sentinal
-        self._styles = _sentinal
-        self._scripts = _sentinal
-        self._nodes = _sentinal
     
     @property
     def script_files(self):
