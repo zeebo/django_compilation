@@ -32,10 +32,17 @@ class Registry(type):
     
     @classmethod
     def delete_handler(self, handler):
-        if handler.category == 'script':
-            del self.scripts[handler.mime]
-        if handler.category == 'style':
-            del self.styles[handler.mime]
+        if not hasattr(handler, 'category'):
+            #Assume it's a string
+            if handler in self.scripts:
+                del self.scripts[handler]
+            if handler in self.styles:
+                del self.styles[handler]
+        else:
+            if handler.category == 'script':
+                del self.scripts[handler.mime]
+            if handler.category == 'style':
+                del self.styles[handler.mime]
     
     @classmethod
     def script_mimes(self):

@@ -112,11 +112,11 @@ class ParserTestsAbstract(object):
     
     def test_inline_script_not_captured_as_url(self):
         parser = self.parser_class('<script type="text/javascript">Inline</script>')
-        parser.script_files
+        self.assertEqual(parser.script_files, [])
         
     def test_inline_style_not_captured_as_url(self):
         parser = self.parser_class('<style type="text/css">Inline</style>')
-        parser.style_files
+        self.assertEqual(parser.style_files, [])
     
     def test_invalid_html(self):
         parser = self.parser_class('<this isnt >fhtm <html <<')
@@ -181,6 +181,13 @@ class RegistryTests(CompilerTestCase):
     def tearDown(self):
         Registry.scripts = self._scripts
         Registry.styles = self._styles
+     
+    def make_handler(self, _category='', _mime=''):
+        class NewHandler(object):
+            __metaclass__ = Registry
+            category = _category
+            mime = _mime
+        return NewHandler
     
     def test_abstract_handler(self):
         def make_abstract_handler(_mime=''):
@@ -197,47 +204,38 @@ class RegistryTests(CompilerTestCase):
         self.assertEqual(before_style, Registry.styles)
     
     def test_bad_handler(self):
-        def make_handler(_category='', _mime=''):
-            class NewHandler(object):
-                __metaclass__ = Registry
-                category = _category
-                mime = _mime
-        
-        self.assertRaises(NotImplementedError, make_handler)
-        self.assertRaises(NotImplementedError, make_handler, '', 'mimetype')
-        self.assertRaises(NotImplementedError, make_handler, 'invalid', 'mimetype')
+        self.assertRaises(NotImplementedError, self.make_handler)
+        self.assertRaises(NotImplementedError, self.make_handler, '', 'mimetype')
+        self.assertRaises(NotImplementedError, self.make_handler, 'invalid', 'mimetype')
     
     def test_registered_script(self):
-        class NewHandler(object):
-            __metaclass__ = Registry
-            mime = 'text/test'
-            category = 'script'
-        
-        self.assertEqual(Registry.scripts['text/test'], NewHandler)
+        handler = self.make_handler('script', 'text/test')
+        self.assertEqual(Registry.scripts['text/test'], handler)
     
     def test_registered_style(self):
-        class NewHandler(object):
-            __metaclass__ = Registry
-            mime = 'text/test'
-            category = 'style'
-        
-        self.assertEqual(Registry.styles['text/test'], NewHandler)
+        handler = self.make_handler('style', 'text/test')
+        self.assertEqual(Registry.styles['text/test'], handler)
     
     def test_registry_delete_handler(self):
-        class NewHandler(object):
-            __metaclass__ = Registry
-            mime = 'test/mime'
-            category = 'script'
+        handler = self.make_handler('script', 'test/mime')
         self.assertTrue('test/mime' in Registry.scripts)
-        Registry.delete_handler(NewHandler)
+        Registry.delete_handler(handler)
         self.assertTrue('test/mime' not in Registry.scripts)
         
-        class NewHandler(object):
-            __metaclass__ = Registry
-            mime = 'test/mime'
-            category = 'style'
+        handler = self.make_handler('style', 'test/mime')
         self.assertTrue('test/mime' in Registry.styles)
-        Registry.delete_handler(NewHandler)
+        Registry.delete_handler(handler)
+        self.assertTrue('test/mime' not in Registry.styles)
+    
+    def test_registry_delete_by_mime(self):
+        handler = self.make_handler('script', 'test/mime')
+        self.assertTrue('test/mime' in Registry.scripts)
+        Registry.delete_handler('test/mime')
+        self.assertTrue('test/mime' not in Registry.scripts)
+        
+        handler = self.make_handler('style', 'test/mime')
+        self.assertTrue('test/mime' in Registry.styles)
+        Registry.delete_handler('test/mime')
         self.assertTrue('test/mime' not in Registry.styles)
 
 def del_keys(thing, *keys):
@@ -271,7 +269,6 @@ def django_exceptions():
     
     yield
     del_keys(sys.modules, 'django', 'django.core', 'django.core.exceptions')
-
 
 @contextlib.contextmanager
 def django_settings(settings = {}):
@@ -390,9 +387,32 @@ def paths_exist(*paths):
     yield
     sys.modules['os.path'].exists = old_exists
 
+@contextlib.contextmanager
+def exception_handler(_category, _mime='text/test'):
+    class MyScriptHandler(BaseHandler):
+        mime = _mime
+        category = _category
+        
+        def __init__(self, *args, **kwargs):
+            raise TestException
+    yield
+    Registry.delete_handler(MyScriptHandler)
+
+class MockNodelist(object):
+    def __init__(self, retval):
+        self.retval = retval
+    def render(self, *args, **kwargs):
+        return self.retval
+
+def make_named_files(count = 1):
+    files = [func(mode='w') for func in [tempfile.NamedTemporaryFile]*count]
+    if count == 1:
+        return files[0]
+    return files
+
 class TestBaseHandler(CompilerTestCase):
     def test_read_file(self):
-        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+        with make_named_files() as temp_file:
             temp_file.write('test')
             temp_file.flush()
             handler = BaseHandler(temp_file.name, 'file')
@@ -408,7 +428,7 @@ class TestBaseHandler(CompilerTestCase):
         
     def test_read_django_url(self):
         with django_settings():
-            with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+            with make_named_files() as temp_file:
                 temp_file.write('test')
                 temp_file.flush()
                 handler = BaseHandler('/test%s' % temp_file.name, 'url')
@@ -419,9 +439,8 @@ class TestBaseHandler(CompilerTestCase):
     
     def test_calls_pre_insert(self):
         class MyHandler(BaseHandler):
-            mime = 'text/test'
-            category = 'style'
-            
+            mime = ''
+            category = 'abstract' #Don't put it in the registry
             def pre_insert(self):
                 raise TestException
         
@@ -429,11 +448,11 @@ class TestBaseHandler(CompilerTestCase):
         self.assertRaises(TestException, handler.call_pre_insert)
     
     def test_lazy_read(self):
-        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+        with make_named_files() as temp_file:
             with open_exception(temp_file.name):
                 temp_file.write('test')
                 temp_file.flush()
-            
+                
                 handler = BaseHandler(temp_file.name, 'file') #No exception yet
                 self.assertRaises(TestException, getattr, handler, 'content') #Read when requested
     
@@ -443,36 +462,13 @@ class TestBaseHandler(CompilerTestCase):
         handler = BaseHandler('test', 'content')
         self.assertEqual(hashlib.sha1('test').hexdigest(), handler.hash)
         
-        with tempfile.NamedTemporaryFile(mode='w') as temp_file:
+        with make_named_files() as temp_file:
             with open_exception(temp_file.name): #Don't allow it to open the file for the hash
                 temp_file.write('test')
                 temp_file.flush()
                 
                 handler = BaseHandler(temp_file.name, 'file')
                 self.assertEqual(hashlib.sha1(str(os.path.getmtime(temp_file.name))).hexdigest(), handler.hash)
-
-class MockNodelist(object):
-    def __init__(self, retval):
-        self.retval = retval
-    def render(self, *args, **kwargs):
-        return self.retval
-
-def make_named_files(count = 1):
-    files = [func(mode='w') for func in [tempfile.NamedTemporaryFile]*count]
-    if count == 1:
-        return files[0]
-    return files
-
-@contextlib.contextmanager
-def exception_handler(_category, _mime='text/test'):
-    class MyScriptHandler(BaseHandler):
-        mime = _mime
-        category = _category
-        
-        def __init__(self, *args, **kwargs):
-            raise TestException
-    yield
-    Registry.delete_handler(MyScriptHandler)
 
 class TestTemplateTag(CompilerTestCase):
     def basic_context(self):
