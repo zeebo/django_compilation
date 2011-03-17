@@ -1,12 +1,13 @@
 from handlers.registry import Registry
 from functools import wraps
 
+_sentinal = object()
 def caching_property(attribute):
     def new_decorator(function):
         @property
         @wraps(function)
         def wrapper(self, *args, **kwargs):
-            if getattr(self, attribute) is not None:
+            if getattr(self, attribute) is not _sentinal:
                 return getattr(self, attribute)
             ret_val = function(self, *args, **kwargs)
             setattr(self, attribute, ret_val)
@@ -17,14 +18,14 @@ def caching_property(attribute):
 class ParserBase(object):
     def __init__(self, content):
         self.content = content
-        self._tree = None
-        self._script_files = None
-        self._style_files = None
-        self._script_inlines = None
-        self._style_inlines = None
-        self._styles = None
-        self._scripts = None
-        self._nodes = None
+        self._tree = _sentinal
+        self._script_files = _sentinal
+        self._style_files = _sentinal
+        self._script_inlines = _sentinal
+        self._style_inlines = _sentinal
+        self._styles = _sentinal
+        self._scripts = _sentinal
+        self._nodes = _sentinal
     
     @property
     def script_files(self):
@@ -59,14 +60,12 @@ class ParserBase(object):
         raise NotImplementedError
 
 class LxmlParser(ParserBase):
-    @property
+    @caching_property('_tree')
     def tree(self):
-        if self._tree is None:
-            from lxml import html
-            from lxml.etree import tostring
-            content = '<root>%s</root>' % self.content
-            self._tree = html.fromstring(content)
-        return self._tree
+        from lxml import html
+        from lxml.etree import tostring
+        content = '<root>%s</root>' % self.content
+        return html.fromstring(content)
     
     @caching_property('_script_files')
     def script_files(self):
