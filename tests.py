@@ -331,8 +331,8 @@ def open_exception(file_check):
     old_open = __builtin__.open
     
     def raises(filename, *args, **kwargs):
-        if filename == file_check:
-            raise TestException('Data opened before requested')
+        if filename == file_check or (callable(file_check) and file_check(filename)):
+            raise TestException('%s attempted to be opened when disallowed' % filename)
         return old_open(filename, *args, **kwargs)
     
     __builtin__.open = raises
