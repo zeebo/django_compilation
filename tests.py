@@ -260,7 +260,10 @@ def django_settings(settings = {}):
     module_backup = sys.modules
     
     #Create some fake django modules
-    django = imp.new_module('django')
+    if 'django' in sys.modules:
+        django = sys.modules['django']
+    else:
+        django = imp.new_module('django')
     conf = imp.new_module('conf')
     
     #Make the settings object and stick it in the conf module
@@ -292,7 +295,11 @@ def django_template():
     #run without a hitch. Uses a bunch of inline class creations
     import imp, sys
     module_backup = sys.modules
-    django = imp.new_module('django')
+    if 'django' in sys.modules:
+        django = sys.modules['django']
+    else:
+        django = imp.new_module('django')
+    
     template = type('template', (object,), {
         'Node': object,
         'Library': classmethod(lambda x: type('tag', (object, ), {
@@ -401,7 +408,7 @@ class TestTemplateTag(CompilerTestCase):
         self.my_script_handler = MyScriptHandler
         self.my_style_handler = MyStyleHandler
         
-        with django_template():
+        with django_template(), django_settings({'COMPILER_ROOT':'test'}):
             from templatetags.compiler import CompilerNode
             self.CompilerNode = CompilerNode
     

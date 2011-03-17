@@ -1,4 +1,5 @@
 from django import template
+from django.conf import settings
 from parser import LxmlParser
 from handlers.registry import Registry
 import hashlib
