@@ -1,12 +1,12 @@
 import unittest
 import tempfile
 import contextlib
+from tests.contexts import django_exceptions, django_settings, django_template, open_exception, open_redirector, modified_time, paths_exist, exception_handler
+from tests.utils import MockNodelist, make_named_files
+from tests.exceptions import TestException
 from parser import ParserBase, LxmlParser, caching_property, _sentinal
 from handlers.registry import Registry
-from handlers.base import BaseHandler
-
-class TestException(Exception):
-    pass
+from handlers.base import BaseHandler, BaseCompilingHandler
 
 class CompilerTestCase(unittest.TestCase):
     def assertSortedEqual(self, first, second):
@@ -238,207 +238,43 @@ class RegistryTests(CompilerTestCase):
         Registry.delete_handler('test/mime')
         self.assertTrue('test/mime' not in Registry.styles)
 
-def del_keys(thing, *keys):
-    for key in keys:
-        if key in thing:
-            del thing[key]
+class TestHandlerAbstract(object):
+    def setUp(self):
+        self._scripts = Registry.scripts
+        self._styles = Registry.styles
+    
+    def tearDown(self):
+        Registry.scripts = self._scripts
+        Registry.styles = self._styles
 
-@contextlib.contextmanager
-def django_exceptions():
-    import imp, sys
-    
-    if 'django' in sys.modules:
-        django = sys.modules['django']
-    else:
-        django = imp.new_module('django')
-    core = imp.new_module('core')
-    exceptions = imp.new_module('exceptions')
-    
-    class ImproperlyConfigured(Exception):
-        pass
-    
-    exceptions.__dict__.update({'ImproperlyConfigured': ImproperlyConfigured})
-    core.__dict__.update({'exceptions': exceptions})
-    django.__dict__.update({'core': core})
-    
-    sys.modules.update({
-        'django': django,
-        'django.core': core,
-        'django.core.exceptions': exceptions
-    })
-    
-    yield
-    del_keys(sys.modules, 'django', 'django.core', 'django.core.exceptions')
-
-@contextlib.contextmanager
-def django_settings(settings = {}):
-    #There be magic here!
-    import imp, sys
-    
-    base_settings = {
-        'MEDIA_ROOT': '/',
-        'MEDIA_URL': '/test/',
-    }
-    
-    base_settings.update(settings)
-    
-    #Create some fake django modules
-    if 'django' in sys.modules:
-        django = sys.modules['django']
-    else:
-        django = imp.new_module('django')
-    conf = imp.new_module('conf')
-    
-    #Make the settings object and stick it in the conf module
-    conf.__dict__.update({
-        'settings': type('settings', (object,), base_settings)
-    })
-    
-    #Stick conf in the django module
-    django.__dict__.update({'conf': conf})
-    
-    #Add the modules in directly (they appear as builtin)
-    sys.modules.update({
-        'django': django,
-        'django.conf': conf,
-    })
-    
-    #Ready to test!
-    yield
-    
-    #Context over, reset modules
-    del_keys(sys.modules, 'django', 'django.conf')
-
-@contextlib.contextmanager
-def django_template():
-    #Code to make
-    #  from django import template
-    #  register = template.Library()
-    #  register.tag('compile', do_compile)
-    #run without a hitch. Uses a bunch of inline class creations
-    import imp, sys
-    if 'django' in sys.modules:
-        django = sys.modules['django']
-    else:
-        django = imp.new_module('django')
-    
-    template = type('template', (object,), {
-        'Node': object,
-        'Library': classmethod(lambda x: type('tag', (object, ), {
-            'tag': classmethod(lambda x, y, z: None)
-        }))
-    })
-    django.__dict__.update({'template':template})
-    sys.modules.update({
-        'django':django
-    })
-    yield
-
-    del_keys(sys.modules, 'django')
-
-@contextlib.contextmanager
-def open_exception(file_check):
-    import __builtin__
-    old_open = __builtin__.open
-    
-    def raises(filename, *args, **kwargs):
-        if filename == file_check or (callable(file_check) and file_check(filename)):
-            raise TestException('%s attempted to be opened when disallowed' % filename)
-        return old_open(filename, *args, **kwargs)
-    
-    __builtin__.open = raises
-    yield
-    __builtin__.open = old_open
-
-@contextlib.contextmanager
-def open_redirector(handle_maker):
-    import __builtin__
-    old_open = __builtin__.open
-    
-    def new_open(filename, *args, **kwargs):
-        handle = handle_maker(filename)
-        if handle is not None:
-            return handle
-        return old_open(filename, *args, **kwargs)
-    
-    __builtin__.open = new_open
-    yield
-    __builtin__.open = old_open
-
-@contextlib.contextmanager
-def modified_time(time = ''):
-    import sys
-    new_mtime = lambda x: time
-    old_mtime = sys.modules['os.path'].getmtime
-    sys.modules['os.path'].getmtime = new_mtime
-    yield
-    sys.modules['os.path'].getmtime = old_mtime
-
-@contextlib.contextmanager
-def paths_exist(*paths):
-    import sys
-    
-    old_exists = sys.modules['os.path'].exists
-    def new_exists(path):
-        if path in paths:
-            return True
-        return old_exists(path)
-    sys.modules['os.path'].exists = new_exists
-    yield
-    sys.modules['os.path'].exists = old_exists
-
-@contextlib.contextmanager
-def exception_handler(_category, _mime='text/test'):
-    class MyScriptHandler(BaseHandler):
-        mime = _mime
-        category = _category
-        
-        def __init__(self, *args, **kwargs):
-            raise TestException
-    yield
-    Registry.delete_handler(MyScriptHandler)
-
-class MockNodelist(object):
-    def __init__(self, retval):
-        self.retval = retval
-    def render(self, *args, **kwargs):
-        return self.retval
-
-def make_named_files(count = 1):
-    files = [func(mode='w') for func in [tempfile.NamedTemporaryFile]*count]
-    if count == 1:
-        return files[0]
-    return files
-
-class TestBaseHandler(CompilerTestCase):
     def test_read_file(self):
         with make_named_files() as temp_file:
             temp_file.write('test')
             temp_file.flush()
-            handler = BaseHandler(temp_file.name, 'file')
+            handler = self.handler(temp_file.name, 'file')
             self.assertEqual(handler.content, 'test')
     
     def test_read_content(self):
-        handler = BaseHandler('test', 'content')
+        handler = self.handler('test', 'content')
         self.assertEqual(handler.content, 'test')
     
     def test_file_outside_media_url(self):
         with django_settings({'MEDIA_URL': '/nope'}):
-            self.assertRaises(ValueError, BaseHandler, '/test/file', 'url')
+            self.assertRaises(ValueError, self.handler, '/test/file', 'url')
         
     def test_read_django_url(self):
         with django_settings():
             with make_named_files() as temp_file:
                 temp_file.write('test')
                 temp_file.flush()
-                handler = BaseHandler('/test%s' % temp_file.name, 'url')
+                handler = self.handler('/test%s' % temp_file.name, 'url')
                 self.assertEqual(handler.content, 'test')
         
     def test_invalid_mode(self):
-        self.assertRaises(ValueError, BaseHandler, 'invalid', 'invalid')
+        self.assertRaises(ValueError, self.handler, 'invalid', 'invalid')
     
     def test_calls_pre_insert(self):
-        class MyHandler(BaseHandler):
+        class MyHandler(self.handler):
             mime = ''
             category = 'abstract' #Don't put it in the registry
             def pre_insert(self):
@@ -453,13 +289,13 @@ class TestBaseHandler(CompilerTestCase):
                 temp_file.write('test')
                 temp_file.flush()
                 
-                handler = BaseHandler(temp_file.name, 'file') #No exception yet
+                handler = self.handler(temp_file.name, 'file') #No exception yet
                 self.assertRaises(TestException, getattr, handler, 'content') #Read when requested
     
     def test_hash(self):
         import hashlib
         import os.path
-        handler = BaseHandler('test', 'content')
+        handler = self.handler('test', 'content')
         self.assertEqual(hashlib.sha1('test').hexdigest(), handler.hash)
         
         with make_named_files() as temp_file:
@@ -467,15 +303,27 @@ class TestBaseHandler(CompilerTestCase):
                 temp_file.write('test')
                 temp_file.flush()
                 
-                handler = BaseHandler(temp_file.name, 'file')
+                handler = self.handler(temp_file.name, 'file')
                 self.assertEqual(hashlib.sha1(str(os.path.getmtime(temp_file.name))).hexdigest(), handler.hash)
 
+class TestBaseHandler(CompilerTestCase, TestHandlerAbstract):
+    handler = BaseHandler
+
+class TestBaseCompilingHandler(CompilerTestCase, TestHandlerAbstract):
+    handler = BaseCompilingHandler
+    
+    def test_command_works(self):
+        pass
+
 class TestTemplateTag(CompilerTestCase):
+    def local_exception_handler(self, category):
+        return exception_handler(BaseHandler, Registry, category)
+    
     def basic_context(self):
         return contextlib.nested(django_template(), django_settings({'COMPILER_ROOT':'/'}), django_exceptions(), paths_exist('/css', '/js'))
     
     def test_handlers_created_style_inline(self):
-        with contextlib.nested(self.basic_context(), exception_handler('style')):
+        with contextlib.nested(self.basic_context(), self.local_exception_handler('style')):
             from templatetags.compiler import CompilerNode
             html = "<style type=\"text/test\">testing</style>"
             nodelist = MockNodelist(html)
@@ -484,7 +332,7 @@ class TestTemplateTag(CompilerTestCase):
             self.assertRaises(TestException, compiler_node.render, None)
 
     def test_handlers_created_script_inline(self):
-        with contextlib.nested(self.basic_context(), exception_handler('script')):
+        with contextlib.nested(self.basic_context(), self.local_exception_handler('script')):
             from templatetags.compiler import CompilerNode
             html = "<script type=\"text/test\">testing</script>"
             nodelist = MockNodelist(html)

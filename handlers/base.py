@@ -1,4 +1,6 @@
 from registry import Registry
+import tempfile
+import os
 
 class BaseHandler(object):
     __metaclass__ = Registry
@@ -70,4 +72,23 @@ class BaseHandler(object):
             return hashlib.sha1(str(os.path.getmtime(self._file_path))).hexdigest()
         
         return hashlib.sha1(self._content).hexdigest()
+
+
+class BaseCompilingHandler(BaseHandler):
+    mime = ''
+    category = 'abstract'
+    
+    command = ''
+    
+    def pre_insert(self):
+        #Put the content into a file
+        with tempfile.NamedTemporaryFile(mode='w+b') as temp:
+            temp.write(self.content)
+            temp.flush()
+            
+            exec_command = self.command % temp.name
+            
+            output = os.popen(exec_command).read()
+        
+        return output
     
