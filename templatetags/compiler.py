@@ -1,4 +1,5 @@
 from django import template
+from settings import COMPILER
 
 def hash_handlers(handlers):
     import hashlib
@@ -10,7 +11,7 @@ def do_compile(parser, token):
     return CompilerNode(nodelist)
 
 def convert_to_handlers(inlines, urls, handlers):
-    def convert(nodes, handlers, node_type):
+    def convert(nodes, node_type):
         returned = []
         for data, mime in nodes:
             if mime not in handlers:
@@ -20,8 +21,8 @@ def convert_to_handlers(inlines, urls, handlers):
         return returned
     
     returned = []
-    returned.extend(convert(inlines, handlers, 'content'))
-    returned.extend(convert(urls, handlers, 'url'))
+    returned.extend(convert(inlines, 'content'))
+    returned.extend(convert(urls, 'url'))
     return returned
 
 def get_html_tag(handlers, node_type):
@@ -78,11 +79,16 @@ class CompilerNode(template.Node):
             from django.core.exceptions import ImproperlyConfigured
             raise ImproperlyConfigured('COMPILER_ROOT directory not found. (%s)' % d)
         
-        from parser import LxmlParser
         from handlers.registry import Registry
+        try:
+            import parser
+            Parser = getattr(parser, COMPILER.PARSER_CLASS)
+        except AttributeError, ImportError:
+            from django.core.exceptions import ImproperlyConfigured
+            raise ImproperlyConfigured('Unable to import PARSER_CLASS (parser.%s)' % PARSER_CLASS)
         
         html = self.nodelist.render(context)
-        parsed = LxmlParser(html)
+        parsed = Parser(html)
         styles = convert_to_handlers(parsed.style_inlines, parsed.style_files, Registry.styles)
         scripts = convert_to_handlers(parsed.script_inlines, parsed.script_files, Registry.scripts)
         
