@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 import contextlib
-from tests.contexts import django_exceptions, django_settings, django_template, open_exception, open_redirector, modified_time, paths_exist, exception_handler
+from tests.contexts import django_exceptions, django_settings, django_template, open_exception, open_redirector, modified_time, modified_popen, paths_exist, exception_handler, command_handler
 from tests.utils import MockNodelist, make_named_files
 from tests.exceptions import TestException
 from parser import ParserBase, LxmlParser, caching_property, _sentinal
@@ -313,7 +313,18 @@ class TestBaseCompilingHandler(CompilerTestCase, TestHandlerAbstract):
     handler = BaseCompilingHandler
     
     def test_command_works(self):
-        pass
+        #this test ties the implementation to os.popen.
+        #If this test fails, make sure the implementation of BaseCompilingHandler hasn't changed
+        with contextlib.nested(command_handler(BaseCompilingHandler, Registry, 'script', 'some_command -some -args -p %s'), modified_popen()) as (TestHandler, _):
+            handler = TestHandler('test', 'content')
+            try:
+                handler.call_pre_insert()
+            except TestException, e:
+                #Grab the non variable part of the command (pop the last word off)
+                command = ' '.join(e.message.split(' ')[:-1])
+                self.assertEqual(command, 'some_command -some -args -p')
+            else:
+                raise TestException('os.popen not called during compiling')
 
 class TestTemplateTag(CompilerTestCase):
     def local_exception_handler(self, category):

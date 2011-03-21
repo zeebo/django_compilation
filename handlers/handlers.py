@@ -11,14 +11,16 @@ class CoffeescriptHandler(BaseCompilingHandler):
     mime = 'text/coffeescript'
     category = 'script'
     command = 'coffee -p %s'
+    output_type = 'stdout'
 
 class CSSHandler(BaseHandler):
     mime = 'text/css'
     category = 'style'
 
-class LESSHandler(BaseHandler):
+class LESSHandler(BaseCompilingHandler):
     mime = 'text/less'
     category = 'style'
+    command = 'lessc %s'
 
 class SASSHandler(BaseHandler):
     mime = 'text/sass'

@@ -135,6 +135,27 @@ def modified_time(time = ''):
     sys.modules['os.path'].getmtime = old_mtime
 
 @contextlib.contextmanager
+def modified_popen():
+    import sys
+    def new_popen(command):
+        raise TestException(command)
+    old_popen = sys.modules['os'].popen
+    sys.modules['os'].popen = new_popen
+    yield
+    sys.modules['os'].popen = old_popen
+
+
+@contextlib.contextmanager
+def command_handler(cls, regis, _category, _command, _mime='text/test'):
+    class TestHandler(cls):
+        mime = _mime
+        category = _category
+        command = _command
+    yield TestHandler
+    regis.delete_handler(TestHandler)
+
+
+@contextlib.contextmanager
 def paths_exist(*paths):
     import sys
     
