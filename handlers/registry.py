@@ -75,7 +75,7 @@ class LocatorRegistry(type):
             return type.__new__(meta, classname, bases, class_dict)
         
         #check if it calls itself valid
-        if not new_class.valid:
+        if not new_class.valid():
             return new_class
         
         meta.locators.add(new_class)

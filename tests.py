@@ -269,7 +269,23 @@ class TestHandlerAbstract(object):
         Registry.styles = self._styles
     
     def test_staticfiles_system(self):
-        with contextlib.nested(django_settings({'STATIC_ROOT': '/', 'STATIC_URL': '/static/', 'INSTALLED_APPS': ['django.contrib.staticfiles']}), django_staticfiles()):
+        #In the tests, the specific locator is registered as invalid and so
+        #not loaded. We have to directly import it and add it to the registry
+        
+        from handlers.locators import DjangoStaticfilesLocator
+        
+        @contextlib.contextmanager
+        def locator_context():
+            #in case something in the future changes and it is loaded, check that first
+            #and then delete it after. locators object being a set is spec
+            if DjangoStaticfilesLocator in LocatorRegistry.locators:
+                yield
+            else:
+                LocatorRegistry.locators.add(DjangoStaticfilesLocator)
+                yield
+                LocatorRegistry.delete_locator(DjangoStaticfilesLocator)
+        
+        with contextlib.nested(django_settings({'STATIC_ROOT': '/', 'STATIC_URL': '/static/', 'INSTALLED_APPS': ['django.contrib.staticfiles']}), django_staticfiles(), locator_context()):
             with make_named_files() as temp_file:
                 temp_file.write('test')
                 temp_file.flush()

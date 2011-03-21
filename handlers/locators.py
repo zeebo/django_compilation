@@ -27,8 +27,11 @@ class DjangoStaticfilesLocator(BaseLocator):
             return finders.find(path)
         return []
     
-    @property
     @classmethod
     def valid(cls):
-        from django.conf import settings
-        return'django.contrib.staticfiles' in settings.INSTALLED_APPS
+        try:
+            from django.conf import settings
+            return'django.contrib.staticfiles' in settings.INSTALLED_APPS
+        except:
+            return False
+

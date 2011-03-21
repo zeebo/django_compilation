@@ -100,9 +100,13 @@ class BaseLocator(object):
     def locate(cls, url):
         return []
     
-    @property
     @classmethod
     def valid(cls):
-        return true
+        return True
+
+class DirectoryLocator(BaseLocator):
+    abstract = True
+    
+    
 
     
