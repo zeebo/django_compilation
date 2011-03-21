@@ -28,7 +28,13 @@ def convert_to_handlers(inlines, urls, handlers):
 def get_html_tag(handlers, node_type):
     from django.conf import settings
     import os.path
-    
+    try:
+        import handlers.url_generators
+        generator = getattr(parser, COMPILER.URL_GENERATOR)
+    except AttributeError, ImportError:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured('Unable to import URL_GENERATOR (handlers.url_generators.%s)' % COMPILER.URL_GENERATOR)
+
     #Some convenience lookup dictionaries
     extension = {
         'script': 'js',
@@ -86,7 +92,7 @@ class CompilerNode(template.Node):
             Parser = getattr(parser, COMPILER.PARSER_CLASS)
         except AttributeError, ImportError:
             from django.core.exceptions import ImproperlyConfigured
-            raise ImproperlyConfigured('Unable to import PARSER_CLASS (parser.%s)' % PARSER_CLASS)
+            raise ImproperlyConfigured('Unable to import PARSER_CLASS (parser.%s)' % COMPILER.PARSER_CLASS)
         
         html = self.nodelist.render(context)
         parsed = Parser(html)

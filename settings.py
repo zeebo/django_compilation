@@ -12,4 +12,5 @@ class PropertyDict(object):
 
 COMPILER = PropertyDict({
     'PARSER_CLASS': getattr(django_settings, 'COMPILER_PARSER_CLASS', 'LxmlParser'),
+    'URL_GENERATOR': getattr(django_settings, 'COMPILER_URL_GENERATOR', 'MediaUrlGenerator')
 })

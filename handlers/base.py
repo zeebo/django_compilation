@@ -104,7 +104,7 @@ class BaseLocator(object):
     def valid(cls):
         return True
 
-class DirectoryLocator(BaseLocator):
+class BaseDirectoryLocator(BaseLocator):
     abstract = True
     
     @classmethod

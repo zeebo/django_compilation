@@ -6,7 +6,7 @@ from tests.utils import MockNodelist, make_named_files
 from tests.exceptions import TestException
 from parser import ParserBase, LxmlParser, caching_property, _sentinal
 from handlers.registry import Registry, LocatorRegistry
-from handlers.base import BaseHandler, BaseCompilingHandler
+from handlers.base import BaseHandler, BaseCompilingHandler, BaseDirectoryLocator
 from handlers.locators import DjangoMediaLocator
 
 class CompilerTestCase(unittest.TestCase):
@@ -190,6 +190,18 @@ class LocatorRegistryTests(CompilerTestCase):
     def test_abstract_locator(self):
         before_locators = LocatorRegistry.locators.copy()
         self.make_locator(_abstract = True)
+        self.assertSortedEqual(before_locators, LocatorRegistry.locators)
+    
+    def test_invalid_locator_not_registered(self):
+        before_locators = LocatorRegistry.locators.copy()
+        
+        class NewLocator(object):
+            __metaclass__ = LocatorRegistry
+            
+            @classmethod
+            def valid(cls):
+                return False
+        
         self.assertSortedEqual(before_locators, LocatorRegistry.locators)
 
 class RegistryTests(CompilerTestCase):
@@ -381,6 +393,25 @@ class TestDjangoMediaLocator(CompilerTestCase):
         with django_settings({'MEDIA_URL': '/test/', 'MEDIA_ROOT': '/testroot/'}):
             self.assertEqual(DjangoMediaLocator.locate('/test/file'), ['/testroot/file'])
 
+class TestDirectoryLocator(CompilerTestCase):
+    def setUp(self):
+        class MyDirectoryLocator(BaseDirectoryLocator):
+            url_root = '/dir_statics/'
+            dir_root = '/usr/home/lol/statics/'
+            
+            #Don't let it get registered
+            @classmethod
+            def valid(cls):
+                return False
+        
+        self.locator = MyDirectoryLocator
+    
+    def test_invalid_url_prefix(self):
+        self.assertEqual(self.locator.locate('/not_dir_statics/css/test.css'), [])
+    
+    def test_valid_url_prefix(self):
+        with paths_exist('/usr/home/lol/statics/css/test.css'):
+            self.assertEqual(self.locator.locate('/dir_statics/css/test.css'), ['/usr/home/lol/statics/css/test.css'])
 
 class TestTemplateTag(CompilerTestCase):
     def local_exception_handler(self, category):
