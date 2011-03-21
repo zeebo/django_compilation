@@ -1,7 +1,7 @@
 #File should never be imported directly. Import the LocatorRegistry object and it will
 #find all of the classes defined in this file.
 
-from base import BaseLocator
+from base import BaseLocator, DirectoryLocator
 
 class DjangoMediaLocator(BaseLocator):
     @classmethod
@@ -35,3 +35,11 @@ class DjangoStaticfilesLocator(BaseLocator):
         except:
             return False
 
+#Example directory locator for when your files aren't served by django
+#
+#    class MyDirectoryLocator(DirectoryLocator):
+#       url_root = '/statics/'
+#       dir_root = '/usr/home/lol/statics/'
+#
+#would find files in /usr/home/lol/statics/ for urls starting with /statics/
+#for example, <a href="/statics/some/css/file.css"> -> /usr/home/lol/statics/some/css/file.css
