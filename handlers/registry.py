@@ -7,22 +7,29 @@ class Registry(type):
     styles = {}
     
     def __new__(meta, classname, bases, class_dict):
-        new_class = type.__new__(meta, classname, bases, class_dict)
-        
-        if 'mime' not in class_dict or 'category' not in class_dict:
-            raise NotImplementedError('Types must implement mime and category')
-        
-        if class_dict['category'] not in ['script', 'style', 'abstract']:
-            raise NotImplementedError('Category must be script or style')
-        
         #If abstract, don't register
-        if class_dict['category'] == 'abstract':
+        if 'abstract' in class_dict and class_dict['abstract']:
             #assert that we don't have a mime type
             if class_dict['mime'] != '':
                 raise NotImplementedError('Abstract base handlers should not define a mime type')
             
-            return new_class
+            #assert that we don't have a category
+            if class_dict['category'] != '':
+                raise NotImplementedError('Abstract base handlers should not define a category type')
+            
+            del class_dict['abstract']
+            
+            return type.__new__(meta, classname, bases, class_dict)
+            
         
+        if 'mime' not in class_dict or 'category' not in class_dict:
+            raise NotImplementedError('Types must implement mime and category')
+        
+        if class_dict['category'] not in ['script', 'style']:
+            raise NotImplementedError('Category must be script or style')
+        
+        new_class = type.__new__(meta, classname, bases, class_dict)
+         
         if class_dict['category'] == 'script':
             meta.scripts[class_dict['mime']] = new_class
         else:
@@ -52,5 +59,35 @@ class Registry(type):
     def style_mimes(self):
         return self.styles.keys()
 
-#import all the handlers
+class LocatorRegistry(type):
+    """
+    Metaclass to register all locator classes.
+    """
+    
+    locators = set([])
+    
+    def __new__(meta, classname, bases, class_dict):
+        new_class = type.__new__(meta, classname, bases, class_dict)
+        
+        #If abstract, don't register
+        if 'abstract' in class_dict and class_dict['abstract']:
+            del class_dict['abstract']
+            return type.__new__(meta, classname, bases, class_dict)
+        
+        #check if it calls itself valid
+        if not new_class.valid:
+            return new_class
+        
+        meta.locators.add(new_class)
+        return new_class
+    
+    @classmethod
+    def delete_locator(self, locator):
+        try:
+            self.locators.remove(locator)
+        except KeyError:
+            pass
+
+#import all the handlers and locators
 import handlers
+import locators

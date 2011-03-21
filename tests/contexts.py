@@ -31,6 +31,39 @@ def django_exceptions():
     del_keys(sys.modules, 'django', 'django.core', 'django.core.exceptions')
 
 @contextlib.contextmanager
+def django_staticfiles():
+    import imp, sys
+    
+    if 'django' in sys.modules:
+        django = sys.modules['django']
+    else:
+        django = imp.new_module('django')
+    contrib = imp.new_module('contrib')
+    staticfiles = imp.new_module('staticfiles')
+    
+    @classmethod
+    def raiser(*args, **kwargs):
+        raise TestException
+        
+    staticfiles.__dict__.update({
+        'finders': type('find', (object,), {
+            'find': raiser,
+        })
+    })
+    contrib.__dict__.update({'staticfiles': staticfiles})
+    django.__dict__.update({'contrib': contrib})
+    
+    sys.modules.update({
+        'django': django,
+        'django.contrib': contrib,
+        'django.contrib.staticfiles': staticfiles
+    })
+    
+    yield
+    del_keys(sys.modules, 'django', 'django.contrib', 'django.contrib.staticfiles')
+
+
+@contextlib.contextmanager
 def django_settings(settings = {}):
     #There be magic here!
     import imp, sys
@@ -38,6 +71,7 @@ def django_settings(settings = {}):
     base_settings = {
         'MEDIA_ROOT': '/',
         'MEDIA_URL': '/test/',
+        'INSTALLED_APPS': [],
     }
     
     base_settings.update(settings)

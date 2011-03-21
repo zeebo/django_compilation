@@ -1,12 +1,13 @@
 import unittest
 import tempfile
 import contextlib
-from tests.contexts import django_exceptions, django_settings, django_template, open_exception, open_redirector, modified_time, modified_popen, paths_exist, exception_handler, command_handler
+from tests.contexts import django_exceptions, django_settings, django_template, open_exception, open_redirector, modified_time, modified_popen, paths_exist, exception_handler, command_handler, django_staticfiles
 from tests.utils import MockNodelist, make_named_files
 from tests.exceptions import TestException
 from parser import ParserBase, LxmlParser, caching_property, _sentinal
-from handlers.registry import Registry
+from handlers.registry import Registry, LocatorRegistry
 from handlers.base import BaseHandler, BaseCompilingHandler
+from handlers.locators import DjangoMediaLocator
 
 class CompilerTestCase(unittest.TestCase):
     def assertSortedEqual(self, first, second):
@@ -173,10 +174,28 @@ class ParserTestsAbstract(object):
 class LxmlParserTests(CompilerTestCase, ParserTestsAbstract):
     parser_class = LxmlParser
 
+class LocatorRegistryTests(CompilerTestCase):
+    def setUp(self):
+        self._locators = LocatorRegistry.locators.copy()
+    
+    def tearDown(self):
+        LocatorRegistry.locators = self._locators
+    
+    def make_locator(self, _abstract = False):
+        class NewLocator(object):
+            __metaclass__ = LocatorRegistry
+            abstract = _abstract
+        return NewLocator
+    
+    def test_abstract_locator(self):
+        before_locators = LocatorRegistry.locators.copy()
+        self.make_locator(_abstract = True)
+        self.assertSortedEqual(before_locators, LocatorRegistry.locators)
+
 class RegistryTests(CompilerTestCase):
     def setUp(self):
-        self._scripts = Registry.scripts
-        self._styles = Registry.styles
+        self._scripts = Registry.scripts.copy()
+        self._styles = Registry.styles.copy()
     
     def tearDown(self):
         Registry.scripts = self._scripts
@@ -190,15 +209,17 @@ class RegistryTests(CompilerTestCase):
         return NewHandler
     
     def test_abstract_handler(self):
-        def make_abstract_handler(_mime=''):
+        def make_abstract_handler(_category='', _mime=''):
             class TestAbstractHandler(object):
                 __metaclass__ = Registry
-                category = 'abstract'
+                abstract = True
+                category = _category
                 mime = _mime
         
-        self.assertRaises(NotImplementedError, make_abstract_handler, 'mime')
+        self.assertRaises(NotImplementedError, make_abstract_handler, _mime='mime')
+        self.assertRaises(NotImplementedError, make_abstract_handler, _category='category')
         
-        before_script, before_style = Registry.scripts, Registry.styles
+        before_script, before_style = Registry.scripts.copy(), Registry.styles.copy()
         make_abstract_handler()
         self.assertEqual(before_script, Registry.scripts)
         self.assertEqual(before_style, Registry.styles)
@@ -240,13 +261,21 @@ class RegistryTests(CompilerTestCase):
 
 class TestHandlerAbstract(object):
     def setUp(self):
-        self._scripts = Registry.scripts
-        self._styles = Registry.styles
+        self._scripts = Registry.scripts.copy()
+        self._styles = Registry.styles.copy()
     
     def tearDown(self):
         Registry.scripts = self._scripts
         Registry.styles = self._styles
-
+    
+    def test_staticfiles_system(self):
+        with contextlib.nested(django_settings({'STATIC_ROOT': '/', 'STATIC_URL': '/static/', 'INSTALLED_APPS': ['django.contrib.staticfiles']}), django_staticfiles()):
+            with make_named_files() as temp_file:
+                temp_file.write('test')
+                temp_file.flush()
+                
+                self.assertRaises(TestException, self.handler, '/static%s' % temp_file.name, 'url')
+    
     def test_read_file(self):
         with make_named_files() as temp_file:
             temp_file.write('test')
@@ -276,7 +305,8 @@ class TestHandlerAbstract(object):
     def test_calls_pre_insert(self):
         class MyHandler(self.handler):
             mime = ''
-            category = 'abstract' #Don't put it in the registry
+            category = '' 
+            abstract = True #Don't put it in the registry
             def pre_insert(self):
                 raise TestException
         
@@ -325,6 +355,16 @@ class TestBaseCompilingHandler(CompilerTestCase, TestHandlerAbstract):
                 self.assertEqual(command, 'some_command -some -args -p')
             else:
                 raise TestException('os.popen not called during compiling')
+
+class TestDjangoMediaLocator(CompilerTestCase):
+    def test_file_outside_media_url(self):
+        with django_settings({'MEDIA_URL': '/nope'}):
+            self.assertEqual(DjangoMediaLocator.locate('/test/file'), [])
+        
+    def test_file_inside_media_url(self):
+        with django_settings({'MEDIA_URL': '/test/', 'MEDIA_ROOT': '/testroot/'}):
+            self.assertEqual(DjangoMediaLocator.locate('/test/file'), ['/testroot/file'])
+
 
 class TestTemplateTag(CompilerTestCase):
     def local_exception_handler(self, category):

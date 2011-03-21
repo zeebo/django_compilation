@@ -1,12 +1,13 @@
-from registry import Registry
+from registry import Registry, LocatorRegistry
 import tempfile
 import os
 
 class BaseHandler(object):
     __metaclass__ = Registry
+    abstract = True
     
     mime = ''
-    category = 'abstract'
+    category = ''
     
     def __init__(self, data, mode):
         if mode not in ['file', 'url', 'content']:
@@ -22,25 +23,22 @@ class BaseHandler(object):
     def init_with_url(self, data):
         """
         Uses the URL to find the media file to be compressed.
-        Should support relative urls that begin with MEDIA_URL
         
-        Can't support absolute urls without doing a page grab every time
-        or complicated cacheing.
-        
-        Based on
-        https://github.com/mintchaos/django_compressor/blob/master/compressor/base.py
-        Compressor.get_filename
+        Checks all the locators for files, then picks the one with the most
+        recent modified time.
         """
         
-        from django.conf import settings
-        import os
-        if not data.startswith(settings.MEDIA_URL):
-            raise ValueError('Unable to determine where the file for \'%s\' is located. URL must begin with \'%s\'' % (data, settings.MEDIA_URL))
+        paths = []
+        for locator in LocatorRegistry.locators:
+            paths.extend(locator.locate(data))
         
-        path = data[len(settings.MEDIA_URL):]
-        file_path = os.path.join(settings.MEDIA_ROOT, path)
+        if len(paths) == 0:
+            raise ValueError('Unable to locate a file for the url (\'%s\').' % data)
         
-        self._file_path = file_path
+        #Schwartzian transform. ohh yeahh
+        paths.sort(key=lambda path: os.path.getmtime(path))
+        
+        self._file_path = paths[0]
     
     def init_with_content(self, data):
         self._content = data
@@ -75,8 +73,10 @@ class BaseHandler(object):
 
 
 class BaseCompilingHandler(BaseHandler):
+    abstract = True
+    
     mime = ''
-    category = 'abstract'
+    category = ''
     
     command = ''
     
@@ -91,4 +91,18 @@ class BaseCompilingHandler(BaseHandler):
             output = os.popen(exec_command).read()
         
         return output
+
+class BaseLocator(object):
+    __metaclass__ = LocatorRegistry
+    abstract = True
+    
+    @classmethod
+    def locate(cls, url):
+        return []
+    
+    @property
+    @classmethod
+    def valid(cls):
+        return true
+
     

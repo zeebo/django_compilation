@@ -29,6 +29,7 @@ def get_html_tag(handlers, node_type):
     from django.conf import settings
     import os.path
     
+    #Some convenience lookup dictionaries
     extension = {
         'script': 'js',
         'style': 'css',
@@ -44,7 +45,7 @@ def get_html_tag(handlers, node_type):
     
     directory = os.path.join(settings.MEDIA_ROOT, settings.COMPILER_ROOT, extension[node_type])
     filename = '%s.%s' % (hash_handlers(handlers), extension[node_type])
-    url = os.path.join(settings.MEDIA_URL, extension[node_type], filename)
+    url = os.path.join(settings.MEDIA_URL, extension[node_type], filename) #TODO: change to url_generators
     full_path = os.path.join(directory, filename)
     
     if not os.path.exists(full_path):
