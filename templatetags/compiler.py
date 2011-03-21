@@ -29,8 +29,8 @@ def get_html_tag(handlers, node_type):
     from django.conf import settings
     import os.path
     try:
-        import handlers.url_generators
-        generator = getattr(parser, COMPILER.URL_GENERATOR)
+        import handlers.url_generators as url_gens
+        generator = getattr(url_gens, COMPILER.URL_GENERATOR)
     except AttributeError, ImportError:
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured('Unable to import URL_GENERATOR (handlers.url_generators.%s)' % COMPILER.URL_GENERATOR)
