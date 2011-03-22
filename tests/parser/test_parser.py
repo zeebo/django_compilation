@@ -1,5 +1,4 @@
 from tests.utils import CompilerTestCase
-from compilation.parser.LxmlParser import LxmlParser
 from compilation.parser.parser import ParserBase, caching_property, _sentinal
 
 def combinations(seq):
@@ -159,9 +158,6 @@ class ParserTestsAbstract(object):
         parser.scripts
         parser.nodes
         parser.tree
-
-class LxmlParserTests(CompilerTestCase, ParserTestsAbstract):
-    parser_class = LxmlParser
 
 if __name__ == '__main__':
     unittest.main()
