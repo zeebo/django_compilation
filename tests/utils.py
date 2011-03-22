@@ -1,4 +1,9 @@
 import tempfile
+import unittest
+
+class CompilerTestCase(unittest.TestCase):
+    def assertSortedEqual(self, first, second):
+        self.assertEqual(sorted(first), sorted(second))
 
 def del_keys(thing, *keys):
     for key in keys:
