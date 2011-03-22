@@ -1,4 +1,6 @@
 from tests.utils import CompilerTestCase
+from compilation.parser.LxmlParser import LxmlParser
+from compilation.parser.parser import ParserBase, caching_property, _sentinal
 
 def combinations(seq):
     from itertools import combinations as comb

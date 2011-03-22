@@ -1,5 +1,5 @@
 from parser import ParserBase, caching_property
-from handlers.registry import HandlerRegistry
+from compilation.handlers.registry import HandlerRegistry
 
 class LxmlParser(ParserBase):
     @caching_property('_tree')
