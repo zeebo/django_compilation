@@ -1,5 +1,5 @@
 from django import template
-from settings import COMPILER
+from compilation.settings import COMPILER
 
 def hash_handlers(handlers):
     import hashlib
@@ -28,12 +28,12 @@ def convert_to_handlers(inlines, urls, handlers):
 def get_html_tag(handlers, node_type):
     from django.conf import settings
     import os.path
-    try:
-        import handlers.url_generators as url_gens
-        generator = getattr(url_gens, COMPILER.URL_GENERATOR)
-    except AttributeError, ImportError:
-        from django.core.exceptions import ImproperlyConfigured
-        raise ImproperlyConfigured('Unable to import URL_GENERATOR (handlers.url_generators.%s)' % COMPILER.URL_GENERATOR)
+    #try:
+    #    import compilation.handlers.url_generators as url_gens
+    #    generator = getattr(url_gens, COMPILER.URL_GENERATOR)
+    #except (AttributeError, ImportError):
+    #    from django.core.exceptions import ImproperlyConfigured
+    #    raise ImproperlyConfigured('Unable to import URL_GENERATOR (handlers.url_generators.%s)' % COMPILER.URL_GENERATOR)
 
     #Some convenience lookup dictionaries
     extension = {
@@ -86,18 +86,18 @@ class CompilerNode(template.Node):
             from django.core.exceptions import ImproperlyConfigured
             raise ImproperlyConfigured('COMPILER_ROOT directory not found. (%s)' % d)
         
-        from handlers.registry import Registry
+        from compilation.handlers.base import HandlerRegistry
         try:
-            import parser
-            Parser = getattr(parser, COMPILER.PARSER_CLASS)
-        except AttributeError, ImportError:
+            import compilation.parser
+            Parser = getattr(getattr(compilation.parser, COMPILER.PARSER_CLASS), COMPILER.PARSER_CLASS)
+        except (AttributeError, ImportError):
             from django.core.exceptions import ImproperlyConfigured
             raise ImproperlyConfigured('Unable to import PARSER_CLASS (parser.%s)' % COMPILER.PARSER_CLASS)
-        
+
         html = self.nodelist.render(context)
         parsed = Parser(html)
-        styles = convert_to_handlers(parsed.style_inlines, parsed.style_files, Registry.styles)
-        scripts = convert_to_handlers(parsed.script_inlines, parsed.script_files, Registry.scripts)
+        styles = convert_to_handlers(parsed.style_inlines, parsed.style_files, HandlerRegistry.styles)
+        scripts = convert_to_handlers(parsed.script_inlines, parsed.script_files, HandlerRegistry.scripts)
         
         output = []
         output.append(get_html_tag(scripts, 'script'))
