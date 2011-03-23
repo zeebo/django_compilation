@@ -151,7 +151,7 @@ class BaseCompilingHandler(BaseHandler):
             exec_command = self.command % temp.name
             
             output = os.popen(exec_command).read()
-        
-        return output
+            
+            self._content = output
 
 import handlers
