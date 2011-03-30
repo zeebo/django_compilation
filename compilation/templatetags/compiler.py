@@ -52,6 +52,9 @@ def get_html_tag(handlers, node_type):
     directory = os.path.join(settings.MEDIA_ROOT, settings.COMPILER_ROOT, extension[node_type])
     filename = '%s.%s' % (hash_handlers(handlers), extension[node_type])
     url = os.path.join(settings.MEDIA_URL, extension[node_type], filename) #TODO: change to url_generators
+    
+    #temp hack
+    url = '/static/comp/%s/%s' % (extension[node_type], filename)
     full_path = os.path.join(directory, filename)
     
     if not os.path.exists(full_path):
@@ -62,6 +65,9 @@ def get_html_tag(handlers, node_type):
                 file_handle.write(handler.content)
                 file_handle.write('\n')
             file_handle.flush()
+    
+    if node_type == 'script':
+        return '<script type=\'text/javascript\' src=\'%s\'></script>' % url
     
     return '<link type=\'%s\' href=\'%s\' />' % (mime[node_type], url)
 
@@ -87,9 +93,13 @@ class CompilerNode(template.Node):
             raise ImproperlyConfigured('COMPILER_ROOT directory not found. (%s)' % d)
         
         from compilation.handlers.base import HandlerRegistry
+        from compilation.parser.LxmlParser import LxmlParser as Parser
         try:
-            import compilation.parser
-            Parser = getattr(getattr(compilation.parser, COMPILER.PARSER_CLASS), COMPILER.PARSER_CLASS)
+            #import compilation.parser
+            #Parser = getattr(getattr(compilation.parser, COMPILER.PARSER_CLASS), COMPILER.PARSER_CLASS)
+            #temp fix to get stuff working
+            
+            pass
         except (AttributeError, ImportError):
             from django.core.exceptions import ImproperlyConfigured
             raise ImproperlyConfigured('Unable to import PARSER_CLASS (parser.%s)' % COMPILER.PARSER_CLASS)
